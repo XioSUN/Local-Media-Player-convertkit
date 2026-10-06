@@ -1,4 +1,7 @@
-import { fs } from '@kit.CoreFileKit';
+import { picker } from '@kit.CoreFileKit';
+import fs from '@ohos.file.fs';
+import { common } from '@kit.AbilityKit';
+import { util } from '@kit.ArkTS';
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
@@ -22,12 +25,20 @@ import { MemoryZipSource } from '../core/zip/ZipCodec.ts';
  */
 export type InstallPhase = 'idle' | 'downloading' | 'verifying' | 'installing' | 'done' | 'failed';
 
+/** 安装结果 */
+export interface InstallResult {
+  ok: boolean;
+  message: string;
+}
+
 export class ExtensionPackageManager {
+  readonly context: common.Context;
   readonly pluginsDir: string;
   readonly installedFile: string;
   private store: InstalledStore;
 
-  constructor(readonly context: common.Context) {
+  constructor(context: common.Context) {
+    this.context = context;
     this.pluginsDir = `${context.filesDir}/plugins`;
     this.installedFile = `${this.pluginsDir}/installed.json`;
     this.store = new InstalledStore([]);
@@ -85,7 +96,7 @@ export class ExtensionPackageManager {
   async install(
     pkg: RegistryPackage,
     onPhase?: (phase: InstallPhase, message: string) => void
-  ): Promise<{ ok: boolean; message: string }> {
+  ): Promise<InstallResult> {
     try {
       onPhase?.('downloading', `下载 ${pkg.name}…`);
       const bytes = await this.httpGetBytes(pkg.url);
@@ -172,7 +183,7 @@ export class ExtensionPackageManager {
 
   private async httpGet(url: string): Promise<string> {
     const bytes = await this.httpGetBytes(url);
-    return new TextDecoder().decode(bytes);
+    return util.TextDecoder.create('utf-8').decodeToString(bytes);
   }
 
   private httpGetBytes(url: string): Promise<Uint8Array> {
@@ -207,7 +218,8 @@ export class ExtensionPackageManager {
         const stat = await fs.stat(file.fd);
         const buf = new ArrayBuffer(stat.size);
         await fs.read(file.fd, buf);
-        return JSON.parse(new TextDecoder().decode(new Uint8Array(buf))) as object;
+        const decoder = util.TextDecoder.create('utf-8');
+        return JSON.parse(decoder.decodeToString(new Uint8Array(buf))) as object;
       } finally {
         await fs.close(file.fd);
       }

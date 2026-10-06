@@ -1,6 +1,9 @@
-import { fs, zlib, picker } from '@kit.CoreFileKit';
+import { picker } from '@kit.CoreFileKit';
+import fs from '@ohos.file.fs';
+import { zlib } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
-import { MappedZipSource, type ZipSource } from '../core/zip/ZipCodec.ts';
+import { common } from '@kit.AbilityKit';
+import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipCodec.ts';
 import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
 import type { PdfInflate } from '../core/pdf/PdfTextExtractor.ts';
@@ -22,9 +25,11 @@ export interface ConvertResult {
  *  - 输出保存：DocumentViewPicker.save（免权限）
  */
 export class ConvertService {
+  private context: common.Context;
   private tmpDir: string;
 
-  constructor(private context: common.Context) {
+  constructor(context: common.Context) {
+    this.context = context;
     this.tmpDir = `${context.filesDir}/convert_tmp`;
   }
 
@@ -42,12 +47,12 @@ export class ConvertService {
     await fs.mkdir(dest).catch(() => undefined);
     const unzipper = new zlib.UnzipFile(uri, dest);
     await unzipper.decompress();
-    const entries: Array<{ name: string; data: Uint8Array }> = [];
+    const entries: ZipEntry[] = [];
     await this.collectDir(dest, '', entries);
     return new MappedZipSource(entries);
   }
 
-  private async collectDir(dir: string, prefix: string, out: Array<{ name: string; data: Uint8Array }>): Promise<void> {
+  private async collectDir(dir: string, prefix: string, out: ZipEntry[]): Promise<void> {
     const names = await fs.listFile(dir);
     for (const n of names) {
       const full = `${dir}/${n}`;
