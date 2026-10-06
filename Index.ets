@@ -1,3 +1,4 @@
+export { DT } from './src/main/ets/view/DesignTokens.ets';
 // HAR 对外出口
 export { ConvertHome } from './src/main/ets/view/ConvertHome';
 export { ConvertService } from './src/main/ets/service/ConvertService';
