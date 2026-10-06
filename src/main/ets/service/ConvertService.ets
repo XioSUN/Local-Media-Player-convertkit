@@ -1,11 +1,10 @@
 import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
-import { zlib } from '@kit.BasicServicesKit';
-import { common } from '@kit.AbilityKit';
 import { common } from '@kit.AbilityKit';
 import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipCodec.ts';
 import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
+import { inflateZlib } from '../core/pdf/Inflate.ts';
 import type { PdfInflate } from '../core/pdf/PdfTextExtractor.ts';
 
 /** 转换结果 */
@@ -33,20 +32,17 @@ export class ConvertService {
     this.tmpDir = `${context.filesDir}/convert_tmp`;
   }
 
-  /** zlib inflate 适配（FlateDecode = zlib 流） */
-  private inflateAdapter: PdfInflate = (data: Uint8Array): Uint8Array => {
-    const out = zlib.decompress(data.buffer as ArrayBuffer, {
-      level: zlib.CompressLevel.COMPRESSION_LEVEL_DEFAULT_COMPRESSION
-    } as zlib.Options);
-    return new Uint8Array(out);
-  };
+  /**
+   * FlateDecode（zlib 流）解压：设备端 @ohos.zlib 无内存解压 API，
+   * 使用核心层纯 TS 实现（Node 测试与 node:zlib 交叉验证过）。
+   */
+  private inflateAdapter: PdfInflate = (data: Uint8Array): Uint8Array => inflateZlib(data);
 
   /** DOCX → MappedZipSource（解包临时目录） */
   private async openDocx(uri: string): Promise<ZipSource> {
     const dest = `${this.tmpDir}/docx_${Date.now()}`;
-    await fs.mkdir(dest).catch(() => undefined);
-    const unzipper = new zlib.UnzipFile(uri, dest);
-    await unzipper.decompress();
+    await fs.mkdir(dest, true).catch(() => undefined);
+    await zlib.unzipFile(uri, dest, { level: 1 });
     const entries: ZipEntry[] = [];
     await this.collectDir(dest, '', entries);
     return new MappedZipSource(entries);

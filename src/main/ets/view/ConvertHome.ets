@@ -46,11 +46,11 @@ export struct ConvertHome {
       const docPicker = new picker.DocumentViewPicker();
       const opts = new picker.DocumentSelectOptions();
       opts.maxSelectNumber = 1;
-      const result = await docPicker.select(opts);
-      if (!result || !result.uris || result.uris.length === 0) {
+      const uris: string[] = await docPicker.select(opts);
+      if (!uris || uris.length === 0) {
         return;
       }
-      this.selectedUri = result.uris[0];
+      this.selectedUri = uris[0];
       this.selectedName = decodeURIComponent(this.selectedUri.substring(this.selectedUri.lastIndexOf('/') + 1));
       this.message = `已选择: ${this.selectedName}`;
     } catch (e) {

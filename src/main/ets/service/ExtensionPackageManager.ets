@@ -2,8 +2,6 @@ import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
-import { common } from '@kit.AbilityKit';
-import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import {
   parseManifest, isCompatible, APP_VERSION,
@@ -174,7 +172,7 @@ export class ExtensionPackageManager {
     const file = await fs.open(this.installedFile, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
     try {
       const text = this.store.serialize();
-      const encoded = util.TextEncoder.createUtf8().encodeInto(text);
+      const encoded = util.TextEncoder.create('utf-8').encodeInto(text);
       await fs.write(file.fd, encoded.buffer as ArrayBuffer);
     } finally {
       await fs.close(file.fd);
