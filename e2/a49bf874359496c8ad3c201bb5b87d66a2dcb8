@@ -1,0 +1,26 @@
+src/main/ets/core/extpack/Hash.ts
+  h_d3159b77e5b8b8 8-9,81
+src/main/ets/core/pdf/PdfWriter.ts
+  h_d3159b77e5b8b8 117,127-128,157-177
+src/main/ets/core/zip/Utf8.ts
+  h_d3159b77e5b8b8 1-79
+src/main/ets/core/zip/ZipCodec.ts
+  h_d3159b77e5b8b8 10,13-14,56,58,198,234,256
+src/main/ets/service/ConvertService.ets
+  h_d3159b77e5b8b8 2,27
+src/main/ets/service/ExtensionPackageManager.ets
+  h_d3159b77e5b8b8 2-3,30,45-46,166-167
+src/ohosTest/ets/test/Ability.test.ets
+  h_d3159b77e5b8b8 2,9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "5.30.1",
+  "base_commit_sha": "e2a49bf874359496c8ad3c201bb5b87d66a2dcb8",
+  "prompts": {},
+  "humans": {
+    "h_d3159b77e5b8b8": {
+      "author": "xiosun <xio.sunshaowei@huawei.com>"
+    }
+  }
+}
