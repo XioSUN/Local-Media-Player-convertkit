@@ -20,8 +20,10 @@
 
 ### 扩展包框架
 
+- **转换能力内置解锁（v1.1）**：`BUILTIN_CONVERTERS`（docx→pdf / pdf→docx / pdf→xlsx）
+  随应用分发、免安装即用；`isConverterUnlocked()` 对内置项恒真；
 - `ExtensionManifest` / `RegistryCore`：清单校验（schema v1）、语义化版本比较、注册表解析、
-  安装记录（installed.json）、能力解锁判定 `isConverterUnlocked()`；
+  安装记录（installed.json）、能力解锁判定（未来新能力仍走扩展包门控）；
 - `ExtensionPackageManager.ets`（设备侧）：注册表拉取 → 下载 → SHA-256 常量时间校验 + 大小校验
   → manifest 校验 → 解包至 `files/plugins/<id>/<version>/` → 记录持久化；
 - `ConvertHome.ets`：转换操作 + 扩展包市场（刷新/安装/已装列表）。

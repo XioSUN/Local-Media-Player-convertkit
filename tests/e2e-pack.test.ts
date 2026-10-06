@@ -6,7 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 import { sha256HexBytes, safeEqualHex } from '../src/main/ets/core/extpack/Hash.ts';
-import { parseRegistry, latestCompatible, InstalledStore } from '../src/main/ets/core/extpack/RegistryCore.ts';
+import { parseRegistry, latestCompatible, InstalledStore, BUILTIN_CONVERTERS } from '../src/main/ets/core/extpack/RegistryCore.ts';
 import { parseManifest, validateManifest, APP_VERSION } from '../src/main/ets/core/extpack/ExtensionManifest.ts';
 import { MemoryZipSource } from '../src/main/ets/core/zip/ZipCodec.ts';
 
@@ -44,7 +44,7 @@ test('端到端：构建包 → 启动服务 → 拉注册表 → 下载 → 校
     const registryText = await (await fetch(`${base}/registry.json`)).text();
     const registry = parseRegistry(registryText);
     const available = latestCompatible(registry.packages, APP_VERSION);
-    assert.ok(available.length >= 4, `应有 ≥4 个包，实际 ${available.length}`);
+    assert.ok(available.length >= 1, `应有 ≥1 个包，实际 ${available.length}`);
 
     // 4. 逐包：下载 → SHA-256 → manifest 校验 → 模拟安装
     const store = new InstalledStore();
@@ -81,11 +81,11 @@ test('端到端：构建包 → 启动服务 → 拉注册表 → 下载 → 校
       });
     }
 
-    // 5. 三条转换能力均被解锁
-    assert.equal(store.isConverterUnlocked('docx-to-pdf'), true);
-    assert.equal(store.isConverterUnlocked('pdf-to-docx'), true);
-    assert.equal(store.isConverterUnlocked('pdf-to-xlsx'), true);
-    // 视觉预设包不提供转换能力
+    // 5. 三条转换能力为内置解锁（安装前后均可用，v1.1 起随应用分发）
+    for (const id of BUILTIN_CONVERTERS) {
+      assert.equal(store.isConverterUnlocked(id), true, `${id} 应内置解锁`);
+    }
+    // 视觉预设包已安装入库
     assert.equal(store.list().some((p) => p.kind === 'visual-preset'), true);
   } finally {
     child.kill('SIGTERM');

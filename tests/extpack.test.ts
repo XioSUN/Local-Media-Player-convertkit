@@ -7,7 +7,7 @@ import {
   validateManifest, parseManifest, compareVersions, isCompatible
 } from '../src/main/ets/core/extpack/ExtensionManifest.ts';
 import {
-  parseRegistry, latestCompatible, InstalledStore
+  parseRegistry, latestCompatible, InstalledStore, BUILTIN_CONVERTERS
 } from '../src/main/ets/core/extpack/RegistryCore.ts';
 
 // ── SHA-256 ──────────────────────────────────────────
@@ -126,6 +126,21 @@ test('最新兼容版本筛选', () => {
   assert.equal(all.length, 2);
 });
 
+test('内置转换器免安装解锁（v1.1 默认可用）', () => {
+  const empty = new InstalledStore(); // 空库（未安装任何包）
+  for (const id of BUILTIN_CONVERTERS) {
+    assert.equal(empty.isConverterUnlocked(id), true, `${id} 应内置解锁`);
+  }
+  // 未知/未来能力仍受扩展包门控
+  assert.equal(empty.isConverterUnlocked('pdf-to-excel'), false);
+  empty.upsert({
+    id: 'pack-future', name: '未来能力', version: '1.0.0',
+    kind: 'converter-profile', installPath: '/tmp/x', enabled: true,
+    installedAt: '2026-10-06T00:00:00Z', provides: ['pdf-to-excel']
+  });
+  assert.equal(empty.isConverterUnlocked('pdf-to-excel'), true);
+});
+
 test('InstalledStore：安装/启停/持久化 round-trip', () => {
   const store = new InstalledStore();
   store.upsert({
@@ -136,7 +151,8 @@ test('InstalledStore：安装/启停/持久化 round-trip', () => {
   assert.equal(store.isConverterUnlocked('docx-to-pdf'), true);
   assert.equal(store.isConverterUnlocked('pdf-to-excel'), false);
   store.setEnabled('pack-docx-to-pdf', false);
-  assert.equal(store.isConverterUnlocked('docx-to-pdf'), false);
+  // v1.1：内置转换器不随扩展包启停变化
+  assert.equal(store.isConverterUnlocked('docx-to-pdf'), true);
 
   const restored = InstalledStore.deserialize(store.serialize());
   assert.equal(restored.get('pack-docx-to-pdf')?.provides?.[0], 'docx-to-pdf');

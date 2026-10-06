@@ -18,7 +18,7 @@ const DEFAULT_REGISTRY_URL = 'http://127.0.0.1:8765/registry.json';
 export struct ConvertHome {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
-  @State message: string = '选择文件并导出；转换能力由功能包解锁';
+  @State message: string = '转换能力已内置，选择文件即可导出 PDF / Word / Excel';
   @State selectedName: string = '';
   @State busy: boolean = false;
   @State installedCount: number = 0;
@@ -85,10 +85,6 @@ export struct ConvertHome {
       this.message = '请先选择源文件（上方「选择文件」）。';
       return;
     }
-    if (!this.packManager || !this.packManager.isConverterUnlocked(this.converterId(target))) {
-      this.message = `${this.converterLabel(target)} 未解锁：请在下方市场安装对应功能包。`;
-      return;
-    }
     this.busy = true;
     this.message = '转换中…';
     this.convertService.convert(this.selectedUri, this.selectedName, target as 'pdf' | 'docx' | 'xlsx')
@@ -113,7 +109,7 @@ export struct ConvertHome {
     this.packManager.fetchRegistry(this.registryUrl)
       .then((pkgs: RegistryPackage[]) => {
         this.market = pkgs;
-        this.installStatus = `市场共 ${pkgs.length} 个包。安装即下载并校验（SHA-256）。`;
+        this.installStatus = `市场共 ${pkgs.length} 个包（视觉预设等扩展资源）。安装即下载并校验（SHA-256）。`;
       })
       .catch((e: Error) => {
         this.market = [];

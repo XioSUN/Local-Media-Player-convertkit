@@ -18,6 +18,6 @@ export type { PdfText, PdfPageText, PdfLine, PdfInflate } from './src/main/ets/c
 export { docxToPdf, pdfToDocx, pdfToXlsx, CONVERTER_DOCX2PDF, CONVERTER_PDF2DOCX, CONVERTER_PDF2XLSX } from './src/main/ets/core/Converters.ts';
 export { parseManifest, validateManifest, compareVersions, isCompatible, APP_VERSION } from './src/main/ets/core/extpack/ExtensionManifest.ts';
 export type { ExtensionManifest, ConverterProvide, PackKind } from './src/main/ets/core/extpack/ExtensionManifest.ts';
-export { parseRegistry, latestCompatible, InstalledStore } from './src/main/ets/core/extpack/RegistryCore.ts';
+export { parseRegistry, latestCompatible, InstalledStore, BUILTIN_CONVERTERS, isBuiltInConverter } from './src/main/ets/core/extpack/RegistryCore.ts';
 export type { Registry, RegistryPackage, InstalledPackage } from './src/main/ets/core/extpack/RegistryCore.ts';
 export { sha256Hex, sha256HexBytes, safeEqualHex } from './src/main/ets/core/extpack/Hash.ts';

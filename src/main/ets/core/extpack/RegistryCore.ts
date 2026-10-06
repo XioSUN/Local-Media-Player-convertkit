@@ -9,6 +9,16 @@
 
 import { compareVersions, isCompatible, type PackKind } from './ExtensionManifest.ts';
 
+/**
+ * 内置转换器（v1.1 起随应用分发，无需安装任何扩展包即解锁）。
+ * converter-profile 类型扩展包保留用于未来分发新增转换能力。
+ */
+export const BUILTIN_CONVERTERS: string[] = ['docx-to-pdf', 'pdf-to-docx', 'pdf-to-xlsx'];
+
+export function isBuiltInConverter(converterId: string): boolean {
+  return BUILTIN_CONVERTERS.includes(converterId);
+}
+
 export interface RegistryPackage {
   id: string;
   name: string;
@@ -117,8 +127,13 @@ export class InstalledStore {
     return true;
   }
 
-  /** 某转换器是否被已启用的 converter-profile 扩展包提供 */
+  /**
+   * 转换器是否可用：内置清单恒真；其余由已启用的 converter-profile 扩展包提供。
+   */
   isConverterUnlocked(converterId: string): boolean {
+    if (isBuiltInConverter(converterId)) {
+      return true;
+    }
     return Array.from(this.packages.values()).some(
       (p) => p.enabled && p.kind === 'converter-profile' && (p.provides ?? []).includes(converterId)
     );
