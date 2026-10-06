@@ -1,0 +1,22 @@
+// HAR 对外出口
+export { ConvertHome } from './src/main/ets/view/ConvertHome';
+export { ConvertService } from './src/main/ets/service/ConvertService';
+export type { ConvertResult } from './src/main/ets/service/ConvertService';
+export { ExtensionPackageManager } from './src/main/ets/service/ExtensionPackageManager';
+export type { InstallPhase } from './src/main/ets/service/ExtensionPackageManager';
+export { ZipWriter, MemoryZipSource, MappedZipSource, crc32 } from './src/main/ets/core/zip/ZipCodec.ts';
+export type { ZipSource, ZipEntry, InflateRawFn } from './src/main/ets/core/zip/ZipCodec.ts';
+export { parseDocxXml, docToPlainText } from './src/main/ets/core/ooxml/DocxParser.ts';
+export type { DocDocument, DocParagraph, DocRun, ParagraphStyle } from './src/main/ets/core/ooxml/DocxParser.ts';
+export { DocxWriter } from './src/main/ets/core/ooxml/DocxWriter.ts';
+export { XlsxWriter, colLetter } from './src/main/ets/core/ooxml/XlsxWriter.ts';
+export type { Workbook, Worksheet, CellValue } from './src/main/ets/core/ooxml/XlsxWriter.ts';
+export { PdfWriter } from './src/main/ets/core/pdf/PdfWriter.ts';
+export { extractPdfText, linesToRows } from './src/main/ets/core/pdf/PdfTextExtractor.ts';
+export type { PdfText, PdfPageText, PdfLine, PdfInflate } from './src/main/ets/core/pdf/PdfTextExtractor.ts';
+export { docxToPdf, pdfToDocx, pdfToXlsx, CONVERTER_DOCX2PDF, CONVERTER_PDF2DOCX, CONVERTER_PDF2XLSX } from './src/main/ets/core/Converters.ts';
+export { parseManifest, validateManifest, compareVersions, isCompatible, APP_VERSION } from './src/main/ets/core/extpack/ExtensionManifest.ts';
+export type { ExtensionManifest, ConverterProvide, PackKind } from './src/main/ets/core/extpack/ExtensionManifest.ts';
+export { parseRegistry, latestCompatible, InstalledStore } from './src/main/ets/core/extpack/RegistryCore.ts';
+export type { Registry, RegistryPackage, InstalledPackage } from './src/main/ets/core/extpack/RegistryCore.ts';
+export { sha256Hex, sha256HexBytes, safeEqualHex } from './src/main/ets/core/extpack/Hash.ts';

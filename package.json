@@ -1,0 +1,10 @@
+{
+  "name": "hmos-convert-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HMOS 文档转换与扩展包框架 HAR — docx/pdf/xlsx 编解码 + 在线扩展包",
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "convertkit",
+  "version": "1.0.0",
+  "description": "HMOS 文档转换与扩展包框架：docx→pdf / pdf→docx / pdf→xlsx + 在线功能包",
+  "main": "Index.ets",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+oh_modules/
+build/
+.hvigor/
+.cxx/
+local.properties
+*.har
+.DS_Store
