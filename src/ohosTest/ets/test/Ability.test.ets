@@ -1,11 +1,12 @@
 import { describe, it, expect } from '@ohos/hypium';
+import { common } from '@kit.AbilityKit';
 import { ExtensionPackageManager } from '../../../../main/ets/service/ExtensionPackageManager';
 import { detectDocKind } from '../../../../main/ets/service/DocKind.ets';
 
 export default function abilityTests(): void {
   describe('convertKitOnDevice', () => {
     it('包管理器初始无安装', 0, async () => {
-      const mockContext = { filesDir: '/data/local/tmp' } as Context;
+      const mockContext = { filesDir: '/data/local/tmp' } as common.Context;
       const mgr = new ExtensionPackageManager(mockContext);
       await mgr.load();
       expect(mgr.listInstalled().length).assertEqual(0);

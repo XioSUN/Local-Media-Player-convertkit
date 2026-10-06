@@ -114,7 +114,7 @@ export class PdfWriter {
         this.advance(m.lineHeight);
         continue;
       }
-      // 按宽度贪心折行
+      // 按宽度贪心折行（lookbehind 正则在 ArkTS 正则引擎不可靠，手写按空格分词）
       let line = '';
       let lineWidth = 0;
       const flush = () => {
@@ -124,7 +124,8 @@ export class PdfWriter {
           lineWidth = 0;
         }
       };
-      for (const word of rawLine.split(/(?<=\s)|(?=\s)/)) {
+      const tokens = PdfWriter.splitOnSpaces(rawLine);
+      for (const word of tokens) {
         const w = PdfWriter.textWidth(word, m.size);
         if (lineWidth + w > contentWidth && line.length > 0) {
           flush();
@@ -151,6 +152,27 @@ export class PdfWriter {
         this.newPage(pageH);
       }
     }
+  }
+
+  /** 按空格切分为词与空格片段（保留空格计入宽度，与旧正则行为一致） */
+  private static splitOnSpaces(line: string): string[] {
+    const tokens: string[] = [];
+    let cur = '';
+    for (const ch of line) {
+      if (ch === ' ') {
+        if (cur.length > 0) {
+          tokens.push(cur);
+          cur = '';
+        }
+        tokens.push(' ');
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.length > 0) {
+      tokens.push(cur);
+    }
+    return tokens;
   }
 
   private advance(dy: number): void {

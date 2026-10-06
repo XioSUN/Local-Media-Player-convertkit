@@ -1,4 +1,5 @@
 import { fs, zlib, picker } from '@kit.CoreFileKit';
+import { common } from '@kit.AbilityKit';
 import { MappedZipSource, type ZipSource } from '../core/zip/ZipCodec.ts';
 import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
@@ -23,7 +24,7 @@ export interface ConvertResult {
 export class ConvertService {
   private tmpDir: string;
 
-  constructor(private context: Context) {
+  constructor(private context: common.Context) {
     this.tmpDir = `${context.filesDir}/convert_tmp`;
   }
 

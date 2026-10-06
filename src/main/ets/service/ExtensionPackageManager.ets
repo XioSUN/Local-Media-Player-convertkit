@@ -1,4 +1,6 @@
 import { fs } from '@kit.CoreFileKit';
+import { common } from '@kit.AbilityKit';
+import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import {
   parseManifest, isCompatible, APP_VERSION,
@@ -25,7 +27,7 @@ export class ExtensionPackageManager {
   readonly installedFile: string;
   private store: InstalledStore;
 
-  constructor(readonly context: Context) {
+  constructor(readonly context: common.Context) {
     this.pluginsDir = `${context.filesDir}/plugins`;
     this.installedFile = `${this.pluginsDir}/installed.json`;
     this.store = new InstalledStore([]);
@@ -40,8 +42,8 @@ export class ExtensionPackageManager {
         const stat = await fs.stat(file.fd);
         const buf = new ArrayBuffer(stat.size);
         await fs.read(file.fd, buf);
-        const text = new TextDecoder().decode(new Uint8Array(buf));
-        this.store = InstalledStore.deserialize(text);
+        const decoder = util.TextDecoder.create('utf-8');
+        this.store = InstalledStore.deserialize(decoder.decodeToString(new Uint8Array(buf)));
       } finally {
         await fs.close(file.fd);
       }
@@ -161,7 +163,8 @@ export class ExtensionPackageManager {
     const file = await fs.open(this.installedFile, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
     try {
       const text = this.store.serialize();
-      await fs.write(file.fd, new TextEncoder().encode(text).buffer as ArrayBuffer);
+      const encoded = util.TextEncoder.createUtf8().encodeInto(text);
+      await fs.write(file.fd, encoded.buffer as ArrayBuffer);
     } finally {
       await fs.close(file.fd);
     }

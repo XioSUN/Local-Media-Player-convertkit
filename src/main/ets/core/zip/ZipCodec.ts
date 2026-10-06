@@ -7,8 +7,10 @@
  *     注入的 inflateRaw 适配器解压（Node: zlib.inflateRawSync；
  *     设备侧走 zlib.UnzipFile 解包目录适配，见 service/ZipSourceFactory.ets）。
  *
- * 本文件自包含（零 import）：Node --experimental-strip-types 与 ArkTS 双端可跑。
+ * 除 Utf8 外零 import：Node --experimental-strip-types 与 ArkTS 双端可跑。
  */
+
+import { utf8Decode, utf8Encode } from './Utf8.ts';
 
 export interface ZipEntry {
   name: string;
@@ -51,9 +53,9 @@ export function crc32(data: Uint8Array): number {
 // 写：STORE ZIP
 // ─────────────────────────────────────────────────────
 
-/** utf-8 编码（TextEncoder 在 ArkTS/Node 均可用） */
+/** utf-8 编码（全局 TextEncoder 在 ArkTS 不存在，统一走 Utf8） */
 function utf8Bytes(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
+  return utf8Encode(text);
 }
 
 export class ZipWriter {
@@ -193,7 +195,7 @@ export class MemoryZipSource implements ZipSource {
       const extraLen = dv.getUint16(ptr + 30, true);
       const commentLen = dv.getUint16(ptr + 32, true);
       const localOffset = dv.getUint32(ptr + 42, true);
-      const name = new TextDecoder().decode(bytes.subarray(ptr + 46, ptr + 46 + nameLen));
+      const name = utf8Decode(bytes.subarray(ptr + 46, ptr + 46 + nameLen));
 
       if (!name.endsWith('/')) {
         // 本地头：名字长度需重新读（防 local 与 central 不一致）
@@ -229,7 +231,7 @@ export class MemoryZipSource implements ZipSource {
 
   readText(name: string): string | null {
     const data = this.map.get(name);
-    return data ? new TextDecoder().decode(data) : null;
+    return data ? utf8Decode(data) : null;
   }
 }
 
@@ -251,6 +253,6 @@ export class MappedZipSource implements ZipSource {
 
   readText(name: string): string | null {
     const data = this.map.get(name);
-    return data ? new TextDecoder().decode(data) : null;
+    return data ? utf8Decode(data) : null;
   }
 }
