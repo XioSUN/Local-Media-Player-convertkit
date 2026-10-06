@@ -1,5 +1,6 @@
 import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
+import { zlib } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipCodec.ts';
 import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';

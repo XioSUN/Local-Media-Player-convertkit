@@ -44,7 +44,7 @@ export class ExtensionPackageManager {
 
   /** 启动时加载安装记录 */
   async load(): Promise<void> {
-    this.store = InstalledStore([]);
+    this.store = new InstalledStore([]);
     try {
       const file = await fs.open(this.installedFile, fs.OpenMode.READ_ONLY);
       try {
