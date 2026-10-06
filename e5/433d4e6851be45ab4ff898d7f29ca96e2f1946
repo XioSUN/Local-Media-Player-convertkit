@@ -1,0 +1,16 @@
+src/main/ets/view/ConvertHome.ets
+  h_d3159b77e5b8b8 151,235,303
+src/main/ets/view/DesignTokens.ets
+  h_d3159b77e5b8b8 6-8,18-27,30-31,33-34,37,51,53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "5.30.1",
+  "base_commit_sha": "e5433d4e6851be45ab4ff898d7f29ca96e2f1946",
+  "prompts": {},
+  "humans": {
+    "h_d3159b77e5b8b8": {
+      "author": "xiosun <xio.sunshaowei@huawei.com>"
+    }
+  }
+}
