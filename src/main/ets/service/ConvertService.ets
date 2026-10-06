@@ -6,7 +6,26 @@ import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipC
 import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
 import { inflateZlib } from '../core/pdf/Inflate.ts';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import type { PdfInflate } from '../core/pdf/PdfTextExtractor.ts';
+
+const CVT_DOMAIN = 0x0203;
+const CVT_TAG = 'LMP-Convert';
+
+/** 健壮错误文本（BusinessError/Error/字符串/null 全覆盖，杜绝 undefined） */
+function errText(e: Object | undefined | null): string {
+  if (e === undefined || e === null) {
+    return '未知错误';
+  }
+  const maybe = e as Record<string, string>;
+  if (typeof maybe.message === 'string' && maybe.message.length > 0) {
+    return maybe.message;
+  }
+  if (typeof maybe.code === 'string' || typeof maybe.code === 'number') {
+    return `错误码 ${String(maybe.code)}`;
+  }
+  return String(e);
+}
 
 /** 转换结果 */
 export interface ConvertResult {
@@ -39,11 +58,48 @@ export class ConvertService {
    */
   private inflateAdapter: PdfInflate = (data: Uint8Array): Uint8Array => inflateZlib(data);
 
+  /**
+   * 把源 URI 落到沙箱真实路径。
+   * fs.* 接受 file:// URI，但 zlib.unzipFile 只认真实路径——直接喂 URI 会抛
+   * 无 message 的 code:-1（用户看到的“undefined/TypeError”错误即此）。
+   */
+  private async stageToLocal(uri: string, destPath: string): Promise<void> {
+    await fs.mkdir(this.tmpDir, true).catch(() => undefined);
+    try {
+      await fs.copyFile(uri, destPath);
+      return;
+    } catch (_) {
+      // 个别版本 copyFile 不收 URI → 手工缓冲复制（fs.open/read 认 URI）
+      const src = await fs.open(uri, fs.OpenMode.READ_ONLY);
+      try {
+        const stat = await fs.stat(src.fd);
+        const buf = new ArrayBuffer(stat.size);
+        await fs.read(src.fd, buf);
+        const dst = await fs.open(destPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+        try {
+          await fs.write(dst.fd, buf);
+        } finally {
+          await fs.close(dst.fd);
+        }
+      } finally {
+        await fs.close(src.fd);
+      }
+    }
+  }
+
   /** DOCX → MappedZipSource（解包临时目录） */
   private async openDocx(uri: string): Promise<ZipSource> {
-    const dest = `${this.tmpDir}/docx_${Date.now()}`;
+    const stamp = Date.now();
+    const srcLocal = `${this.tmpDir}/src_${stamp}.docx`;
+    const dest = `${this.tmpDir}/docx_${stamp}`;
     await fs.mkdir(dest, true).catch(() => undefined);
-    await zlib.unzipFile(uri, dest, { level: 1 });
+    await this.stageToLocal(uri, srcLocal);
+    hilog.info(CVT_DOMAIN, CVT_TAG, 'unzip docx -> %{public}s', dest);
+    try {
+      await zlib.unzipFile(srcLocal, dest, {});
+    } catch (e) {
+      throw new Error(`解压 DOCX 失败（${errText(e as Object)}），文件可能损坏或非标准 docx`);
+    }
     const entries: ZipEntry[] = [];
     await this.collectDir(dest, '', entries);
     return new MappedZipSource(entries);
@@ -115,7 +171,10 @@ export class ConvertService {
         suggestedName: `${baseName}.${target}`
       };
     } catch (e) {
-      return { ok: false, message: `转换失败: ${(e as Error).message}` };
+      const msg = errText(e as Object);
+      const stack = (e as Record<string, string>)['stack'] ?? '';
+      hilog.error(CVT_DOMAIN, CVT_TAG, 'convert failed: %{public}s | %{public}s', msg, stack);
+      return { ok: false, message: `转换失败：${msg}` };
     }
   }
 
@@ -155,7 +214,24 @@ export class ConvertService {
     return `已保存: ${uris[0]}`;
   }
 
+  /** 递归删除（该 SDK 的 fs 无 rm/recursive，walk + unlink + rmdir） */
+  private async rmtree(p: string): Promise<void> {
+    const stat = await fs.stat(p).catch(() => undefined);
+    if (stat === undefined) {
+      return;
+    }
+    if (stat.isDirectory()) {
+      const names = await fs.listFile(p).catch(() => [] as string[]);
+      for (const n of names) {
+        await this.rmtree(`${p}/${n}`);
+      }
+      await fs.rmdir(p).catch(() => undefined);
+    } else {
+      await fs.unlink(p).catch(() => undefined);
+    }
+  }
+
   async cleanup(): Promise<void> {
-    await fs.rmdir(this.tmpDir).catch(() => undefined);
+    await this.rmtree(this.tmpDir);
   }
 }

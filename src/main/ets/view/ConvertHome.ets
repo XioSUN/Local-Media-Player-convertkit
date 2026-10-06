@@ -42,6 +42,19 @@ export struct ConvertHome {
       const saved = p.getSync(KEY_REGISTRY, DEFAULT_REGISTRY_URL) as string;
       this.registryUrl = saved;
     });
+    // 联调钩子：aa start --ps autoTestFile <filesDir 下文件名|绝对路径|file://URI> --ps autoTestTarget pdf
+    // 模拟器 picker(UIExtension) 关闭后窗口失焦，UI 驱动不可靠，用它直连转换链取堆栈
+    const atFile = AppStorage.get<string>('autoTestFile') ?? '';
+    if (atFile !== '' && this.convertService) {
+      AppStorage.setOrCreate('autoTestFile', '');
+      const atTarget = (AppStorage.get<string>('autoTestTarget') ?? 'pdf') as 'pdf' | 'docx' | 'xlsx';
+      const svc = this.convertService;
+      const src = atFile.startsWith('/') || atFile.startsWith('file://') ? atFile : `${ctx.filesDir}/${atFile}`;
+      const name = atFile.substring(atFile.lastIndexOf('/') + 1);
+      svc.convert(src, name, atTarget).then((r: ConvertResult) => {
+        this.message = `[autotest] ${r.message}`;
+      });
+    }
   }
 
   private refreshInstalled(): void {
@@ -96,7 +109,7 @@ export struct ConvertHome {
         this.busy = false;
       })
       .catch((e: Error) => {
-        this.message = `转换失败：${e.message}`;
+        this.message = `转换失败：${e?.message ?? '未知错误'}`;
         this.busy = false;
       });
   }
