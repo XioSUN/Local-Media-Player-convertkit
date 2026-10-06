@@ -148,7 +148,7 @@ export struct ConvertHome {
           .height(DT.TAP_MIN - 8)
           .padding({ left: 18, right: 18 })
           .fontColor(DT.ACCENT)
-          .backgroundColor(DT.CARD)
+          .backgroundColor(DT.CARD_2)
           .borderRadius(DT.R_CHIP)
           .onClick(() => this.pickSource())
       }
@@ -232,7 +232,7 @@ export struct ConvertHome {
                   .height(DT.TAP_MIN - 16)
                   .padding({ left: 14, right: 14 })
                   .fontColor(DT.ACCENT)
-                  .backgroundColor(DT.BG)
+                  .backgroundColor(DT.CARD_2)
                   .borderRadius(DT.R_CHIP)
                   .onClick(() => this.refreshMarket())
               }
@@ -300,7 +300,7 @@ export struct ConvertHome {
               .width('100%')
               .padding({ top: 10, bottom: 10 })
               .borderRadius(DT.R_CHIP)
-              .backgroundColor(DT.BG)
+              .backgroundColor(DT.CARD_2)
             }, (pkg: RegistryPackage) => `${pkg.id}@${pkg.version}`)
 
             if (this.installedCount > 0) {
