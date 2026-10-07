@@ -16,7 +16,8 @@ import { compareVersions, isCompatible, type PackKind } from './ExtensionManifes
  */
 export const BUILTIN_CONVERTERS: string[] = [
   'docx-to-pdf', 'pdf-to-docx', 'pdf-to-xlsx',
-  'epub-to-pdf', 'txt-to-pdf', 'pdf-to-epub', 'xlsx-to-pdf', 'docx-to-txt'
+  'epub-to-pdf', 'txt-to-pdf', 'pdf-to-epub', 'xlsx-to-pdf', 'docx-to-txt',
+  'mobi-to-pdf'
 ];
 
 export function isBuiltInConverter(converterId: string): boolean {

@@ -31,6 +31,7 @@ function buildMatrix(): Record<string, TargetOption[]> {
   r['xlsx'] = [opt('pdf', 'PDF')];
   r['epub'] = [opt('pdf', 'PDF')];
   r['txt'] = [opt('pdf', 'PDF')];
+  r['mobi'] = [opt('pdf', 'PDF')];
   r['unsupported'] = [];
   return r;
 }
@@ -44,6 +45,7 @@ function buildKindLabel(): Record<string, string> {
   r['xlsx'] = 'Excel 表格';
   r['epub'] = 'EPUB 电子书';
   r['txt'] = '文本文件';
+  r['mobi'] = 'MOBI 电子书';
   return r;
 }
 
@@ -189,7 +191,7 @@ export struct ConvertHome {
   @StorageProp('navBarHeight') navBarHeight: number = 0;
   // 主题依赖：themeId 变更触发本页重渲染（宪法第五条 v1.5）
   @StorageProp('themeId') themeId: number = DT.DEFAULT_THEME;
-  @State message: string = '转换能力已内置，选择文件即可导出 PDF / Word / Excel / EPUB / TXT';
+  @State message: string = '转换能力已内置，支持 PDF / Word / Excel / EPUB / MOBI / TXT 互转与 PDF 合并';
   @State selectedName: string = '';
   @State sourceKind: string = 'none';
   @State busy: boolean = false;
@@ -331,6 +333,34 @@ export struct ConvertHome {
     });
   }
 
+  /** 多选合并（v3）：picker 多选 PDF → 按选择顺序合并 */
+  private async mergePick(): Promise<void> {
+    if (!this.convertService) {
+      return;
+    }
+    const docPicker = new picker.DocumentViewPicker();
+    const opts = new picker.DocumentSelectOptions();
+    opts.maxSelectNumber = 9;
+    try {
+      const uris: string[] = await docPicker.select(opts);
+      if (!uris || uris.length < 2) {
+        this.message = '合并请在选择器里勾选两份以上 PDF';
+        return;
+      }
+      this.busy = true;
+      this.message = `合并中（${uris.length} 份）…`;
+      const r = await this.convertService.mergePdfs(uris, '合并文档.pdf');
+      this.busy = false;
+      this.message = r.message;
+      if (r.ok) {
+        await this.completeConvert(r);
+      }
+    } catch (e) {
+      this.busy = false;
+      this.message = `选择失败：${(e as Error).message}`;
+    }
+  }
+
   private runConvert(target: ConvertTarget): void {
     if (!this.selectedUri || !this.convertService) {
       this.message = '请先选择源文件（上方「选择文件」）。';
@@ -415,6 +445,25 @@ export struct ConvertHome {
           .backgroundColor(DT.CARD)
           .borderRadius(DT.R_CARD)
           .shadow({ radius: 16, color: DT.SHADOW_CARD, offsetY: 4 })
+
+          // 常驻工具行：PDF 合并（多选）
+          Row({ space: 10 }) {
+            Button('合并 PDF（选多个）')
+              .fontSize(DT.F_SUB)
+              .height(DT.TAP_MIN - 8)
+              .padding({ left: 16, right: 16 })
+              .fontColor(DT.ACCENT)
+              .backgroundColor(DT.CARD_2)
+              .borderRadius(DT.R_CHIP)
+              .enabled(!this.busy)
+              .onClick(() => this.mergePick())
+            Text('按选择顺序拼接页面')
+              .fontSize(DT.F_CAPTION)
+              .fontColor(DT.TEXT_3)
+              .layoutWeight(1)
+              .maxLines(1)
+          }
+          .width('100%')
 
           // 目标格式矩阵（单一渐变主按钮规则 → 首个目标为主按钮，其余胶囊随行）
           if (this.selectedName !== '' && this.targets().length > 0) {

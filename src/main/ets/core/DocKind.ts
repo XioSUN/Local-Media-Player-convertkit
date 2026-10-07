@@ -5,7 +5,7 @@
  * 其余按扩展名兜底（.pdf/.docx/.xlsx/.epub/.txt/.md）。
  */
 
-export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'epub' | 'txt' | 'unsupported';
+export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'epub' | 'txt' | 'mobi' | 'unsupported';
 
 function hasSub(bytes: Uint8Array, text: string): boolean {
   const limit = Math.min(bytes.length - text.length, 4096);
@@ -22,6 +22,14 @@ function hasSub(bytes: Uint8Array, text: string): boolean {
     }
   }
   return false;
+}
+
+function asciiAt(bytes: Uint8Array, off: number): string {
+  let out = '';
+  for (let i = 0; i < 8; i++) {
+    out += String.fromCharCode(bytes[off + i]);
+  }
+  return out;
 }
 
 export function detectDocKind(bytes: Uint8Array, fileName: string): DocKind {
@@ -54,8 +62,15 @@ export function detectDocKind(bytes: Uint8Array, fileName: string): DocKind {
   if (lower.endsWith('.epub')) {
     return 'epub';
   }
+  // MOBI：PalmDB type/creator（偏移 60）
+  if (bytes.length >= 68 && asciiAt(bytes, 60) === 'BOOKMOBI') {
+    return 'mobi';
+  }
   if (lower.endsWith('.txt') || lower.endsWith('.md')) {
     return 'txt';
+  }
+  if (lower.endsWith('.mobi') || lower.endsWith('.azw')) {
+    return 'mobi';
   }
   return 'unsupported';
 }

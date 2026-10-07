@@ -17,6 +17,7 @@ import { parseXlsx } from './ooxml/XlsxParser.ts';
 import { PdfWriter } from './pdf/PdfWriter.ts';
 import { extractPdfText, linesToRows, type PdfInflate } from './pdf/PdfTextExtractor.ts';
 import { parseEpub, type EpubChapter } from './epub/EpubParser.ts';
+import { parseMobi } from './pdf/MobiParser.ts';
 import { writeEpub } from './epub/EpubWriter.ts';
 
 export const CONVERTER_DOCX2PDF = 'docx-to-pdf';
@@ -305,4 +306,29 @@ export function docxToTxt(source: ZipSource): Uint8Array {
     parts.push(para.runs.map((r) => r.text).join(''));
   }
   return utf8Encode(parts.join('\n'));
+}
+
+// ─────────────────────────────────────────────────────
+// v3 扩展管线（MOBI → PDF；PDF 合并）
+// ─────────────────────────────────────────────────────
+
+export const CONVERTER_MOBI2PDF = 'mobi-to-pdf';
+export const CONVERTER_PDFMERGE = 'pdf-merge';
+
+/** MOBI → PDF（章节标题 h1 + 正文段落） */
+export function mobiToPdf(bytes: Uint8Array): Uint8Array {
+  const book = parseMobi(bytes);
+  const pdf = new PdfWriter({ pageSize: 'A4' });
+  for (const ch of book.chapters) {
+    if (ch.title.length > 0) {
+      pdf.addParagraph(ch.title, 'h1');
+    }
+    for (const line of ch.text.split('\n')) {
+      const t = line.trim();
+      if (t.length > 0) {
+        pdf.addParagraph(t, 'normal');
+      }
+    }
+  }
+  return pdf.build();
 }

@@ -11,7 +11,8 @@ export type ConvertRoute =
   | 'pdfToDocx' | 'pdfToXlsx' | 'pdfToEpub'
   | 'xlsxToPdf'
   | 'epubToPdf'
-  | 'txtToPdf';
+  | 'txtToPdf'
+  | 'mobiToPdf';
 
 export function routeConversion(kind: DocKind, target: string): ConvertRoute | null {
   if (kind === 'docx' && target === 'pdf') { return 'docxToPdf'; }
@@ -22,5 +23,6 @@ export function routeConversion(kind: DocKind, target: string): ConvertRoute | n
   if (kind === 'xlsx' && target === 'pdf') { return 'xlsxToPdf'; }
   if (kind === 'epub' && target === 'pdf') { return 'epubToPdf'; }
   if (kind === 'txt' && target === 'pdf') { return 'txtToPdf'; }
+  if (kind === 'mobi' && target === 'pdf') { return 'mobiToPdf'; }
   return null;
 }

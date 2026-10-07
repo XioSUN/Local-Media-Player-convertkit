@@ -68,7 +68,7 @@ test('路由矩阵：不支持组合必须返回 null（如 docx→xlsx、pdf→
 test('一致性：BUILTIN_CONVERTERS 与路由支持集完全相等（防双表漂移）', () => {
   // 路由 id 为 camelCase，BUILTIN 为 kebab-case（对外协议命名）——规范化后必须一一对应
   const routes = ['docxToPdf', 'docxToTxt', 'pdfToDocx', 'pdfToXlsx',
-    'pdfToEpub', 'xlsxToPdf', 'epubToPdf', 'txtToPdf']
+    'pdfToEpub', 'xlsxToPdf', 'epubToPdf', 'txtToPdf', 'mobiToPdf']
     .map((r) => r.replace(/([A-Z])/g, '-$1').toLowerCase());
   assert.deepEqual([...BUILTIN_CONVERTERS].sort(), [...routes].sort());
 });

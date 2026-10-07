@@ -5,13 +5,15 @@ import { common } from '@kit.AbilityKit';
 import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipCodec.ts';
 import {
   docxToPdf, pdfToDocx, pdfToXlsx,
-  epubToPdf, txtToPdf, pdfToEpub, xlsxToPdf, docxToTxt
+  epubToPdf, txtToPdf, pdfToEpub, xlsxToPdf, docxToTxt,
+  mobiToPdf
 } from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
 import { inflateZlib } from '../core/pdf/Inflate.ts';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import type { PdfInflate } from '../core/pdf/PdfTextExtractor.ts';
 import { routeConversion } from '../core/ConvertRoute.ts';
+import { mergePdfs } from '../core/pdf/PdfMerge.ts';
 import { errText } from '../core/ErrorText.ts';
 
 const CVT_DOMAIN = 0x0203;
@@ -171,6 +173,9 @@ export class ConvertService {
         case 'txtToPdf':
           output = txtToPdf(await this.readAll(sourceUri));
           break;
+        case 'mobiToPdf':
+          output = mobiToPdf(await this.readAll(sourceUri));
+          break;
         default:
           return { ok: false, message: `不支持 ${this.kindLabel(kind)} → ${target.toUpperCase()}（docx→PDF/TXT、pdf→Word/Excel/EPUB、xlsx→PDF、epub→PDF、txt→PDF）` };
       }
@@ -186,6 +191,30 @@ export class ConvertService {
       const stack = (e as Record<string, string>)['stack'] ?? '';
       hilog.error(CVT_DOMAIN, CVT_TAG, 'convert failed: %{public}s | %{public}s', msg, stack);
       return { ok: false, message: `转换失败：${msg}` };
+    }
+  }
+
+  /** 多份 PDF 合并（v3：按选择顺序拼接页面树；不支持 ObjStm/加密件，错误可读） */
+  async mergePdfs(uris: string[], suggestedName: string): Promise<ConvertResult> {
+    try {
+      if (uris.length < 2) {
+        return { ok: false, message: '合并至少需要选择两份 PDF' };
+      }
+      const inputs: Uint8Array[] = [];
+      for (const uri of uris) {
+        inputs.push(await this.readAll(uri));
+      }
+      const output = mergePdfs(inputs);
+      return {
+        ok: true,
+        message: `合并成功（${uris.length} 份 → ${(output.length / 1024).toFixed(1)} KB）`,
+        outputBytes: output,
+        suggestedName: suggestedName
+      };
+    } catch (e) {
+      const msg = errText(e as Object);
+      hilog.error(CVT_DOMAIN, CVT_TAG, 'merge failed: %{public}s', msg);
+      return { ok: false, message: `合并失败：${msg}` };
     }
   }
 
