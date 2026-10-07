@@ -1,15 +1,17 @@
 import { picker } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
+import { window } from '@kit.ArkUI';
+import { notificationManager } from '@kit.NotificationKit';
+import notification from '@ohos.notification';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ConvertService, type ConvertResult, type ConvertTarget } from '../service/ConvertService';
 import { type DocKind } from '../service/DocKind.ets';
-import { ExtensionPackageManager, type InstallPhase } from '../service/ExtensionPackageManager';
-import { type RegistryPackage } from '../core/extpack/RegistryCore.ts';
 import { DT } from './DesignTokens';
 
-const PREF_FILE = 'convert_settings';
-const KEY_REGISTRY = 'registryUrl';
-const DEFAULT_REGISTRY_URL = 'http://127.0.0.1:8765/registry.json';
+const CVT_DOMAIN = 0x0203;
+const CVT_TAG = 'LMP-Convert-UI';
+const THEME_IDS: number[] = [0, 1, 2, 3];
 
 /** 目标格式矩阵（v2：按源类型展示可用目标，convertio 式交互） */
 interface TargetOption {
@@ -47,41 +49,176 @@ function buildKindLabel(): Record<string, string> {
 
 const KIND_LABEL: Record<string, string> = buildKindLabel();
 
-/** 导出按钮组内边距常量（DesignTokens 未含此粒度，就近集中定义） */
+/** 主题皮肤选择弹层（四主题：纯白/米白/纯黑/护眼绿） */
+@CustomDialog
+struct ThemeSheetDialog {
+  controller?: CustomDialogController;
+  onPick: (id: number) => void = () => {};
+
+  private currentId(): number {
+    return AppStorage.get<number>(DT.THEME_KEY) ?? DT.DEFAULT_THEME;
+  }
+
+  build() {
+    Column({ space: 12 }) {
+      Text('主题皮肤')
+        .fontSize(DT.F_SECTION)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(DT.TEXT)
+        .width('100%')
+      ForEach(THEME_IDS, (id: number) => {
+        Row({ space: 12 }) {
+          // 双色预览：页面底 + 卡片
+          Row({ space: 4 }) {
+            Column()
+              .width(40)
+              .height(28)
+              .borderRadius(6)
+              .backgroundColor(DT.themeBg(id))
+            Column()
+              .width(24)
+              .height(28)
+              .borderRadius(6)
+              .backgroundColor(DT.themeCard(id))
+          }
+          Text(DT.themeName(id))
+            .fontSize(DT.F_BODY)
+            .fontColor(DT.TEXT)
+            .layoutWeight(1)
+          if (this.currentId() === id) {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(20)
+              .fontColor([DT.ACCENT])
+          }
+        }
+        .width('100%')
+        .height(DT.TAP_MIN)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(DT.R_CHIP)
+        .backgroundColor(this.currentId() === id ? DT.CARD_2 : Color.Transparent)
+        .onClick(() => {
+          this.onPick(id);
+          this.controller?.close();
+        })
+      }, (id: number) => `theme-${id}`)
+    }
+    .padding(DT.PAD)
+    .backgroundColor(DT.CARD)
+    .borderRadius(DT.R_CARD)
+    .width('86%')
+  }
+}
+
+/** 转换完成小窗（成功结果确认 + 保存出口） */
+@CustomDialog
+struct ConvertDoneDialog {
+  controller?: CustomDialogController;
+  @Link ok: boolean;
+  @Link title: string;
+  @Link detail: string;
+  onSave: () => void = () => {};
+
+  build() {
+    Column({ space: 14 }) {
+      SymbolGlyph(this.ok ? $r('sys.symbol.checkmark_circle_fill') : $r('sys.symbol.xmark_circle_fill'))
+        .fontSize(46)
+        .fontColor([this.ok ? DT.SUCCESS : DT.DANGER])
+      Text(this.title)
+        .fontSize(DT.F_SECTION)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(DT.TEXT)
+      Text(this.detail)
+        .fontSize(DT.F_SUB)
+        .fontColor(DT.TEXT_2)
+        .textAlign(TextAlign.Center)
+        .width('100%')
+      Row({ space: 10 }) {
+        if (this.ok) {
+          Button('保存到…')
+            .fontSize(DT.F_SUB)
+            .height(DT.TAP_MIN - 8)
+            .layoutWeight(1)
+            .fontColor('#FFFFFF')
+            .borderRadius(DT.R_CHIP)
+            .linearGradient({ angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] })
+            .onClick(() => {
+              this.controller?.close();
+              this.onSave();
+            })
+          Button('关闭')
+            .fontSize(DT.F_SUB)
+            .height(DT.TAP_MIN - 8)
+            .layoutWeight(1)
+            .fontColor(DT.TEXT)
+            .backgroundColor(DT.CARD_2)
+            .borderRadius(DT.R_CHIP)
+            .onClick(() => {
+              this.controller?.close();
+            })
+        } else {
+          Button('知道了')
+            .fontSize(DT.F_SUB)
+            .height(DT.TAP_MIN - 8)
+            .layoutWeight(1)
+            .fontColor(DT.TEXT)
+            .backgroundColor(DT.CARD_2)
+            .borderRadius(DT.R_CHIP)
+            .onClick(() => {
+              this.controller?.close();
+            })
+        }
+      }
+      .width('100%')
+    }
+    .padding(DT.PAD + 6)
+    .backgroundColor(DT.CARD)
+    .borderRadius(DT.R_CARD)
+    .width('80%')
+  }
+}
 
 /**
- * 文档转换 + 扩展包市场（浅色功能页）。
- * 宪法第六条：每个操作有错误出口与阶段进度；禁用态带原因。
+ * 文档转换页（浅色功能页）。
+ * v3（2026-10-07）：转换能力全内置，扩展包市场 UI 移除；
+ * 完成后弹出结果小窗（宪法第九条：结果确认）+ 系统通知；
+ * 顶栏入口：主题皮肤（四主题用户自选，宪法 v1.5）。
  */
 @Component
 export struct ConvertHome {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
+  // 主题依赖：themeId 变更触发本页重渲染（宪法第五条 v1.5）
+  @StorageProp('themeId') themeId: number = DT.DEFAULT_THEME;
   @State message: string = '转换能力已内置，选择文件即可导出 PDF / Word / Excel / EPUB / TXT';
   @State selectedName: string = '';
   @State sourceKind: string = 'none';
   @State busy: boolean = false;
-  @State installedCount: number = 0;
-  @State installedLines: string[] = [];
-  @State market: RegistryPackage[] = [];
-  @State installStatus: string = '';
-  @State registryUrl: string = DEFAULT_REGISTRY_URL;
-  @State urlEditing: boolean = false;
+  @State doneOk: boolean = true;
+  @State doneTitle: string = '';
+  @State doneDetail: string = '';
   private convertService?: ConvertService;
-  private packManager?: ExtensionPackageManager;
   private selectedUri: string = '';
-  private prefs?: preferences.Preferences;
+  private pendingResult?: ConvertResult;
+
+  private themeSheet: CustomDialogController = new CustomDialogController({
+    builder: ThemeSheetDialog({ onPick: (id: number): void => { this.applyTheme(id); } }),
+    customStyle: true,
+    autoCancel: true
+  });
+  private doneSheet: CustomDialogController = new CustomDialogController({
+    builder: ConvertDoneDialog({
+      ok: this.doneOk,
+      title: this.doneTitle,
+      detail: this.doneDetail,
+      onSave: (): void => { this.doSave(); }
+    }),
+    customStyle: true,
+    autoCancel: true
+  });
 
   aboutToAppear(): void {
     const ctx = getContext(this) as common.Context;
     this.convertService = new ConvertService(ctx);
-    this.packManager = new ExtensionPackageManager(ctx);
-    this.packManager.load().then(() => this.refreshInstalled());
-    preferences.getPreferences(ctx, PREF_FILE).then((p: preferences.Preferences) => {
-      this.prefs = p;
-      const saved = p.getSync(KEY_REGISTRY, DEFAULT_REGISTRY_URL) as string;
-      this.registryUrl = saved;
-    });
     // 联调钩子：aa start --ps autoTestFile <filesDir 下文件名|绝对路径|file://URI> --ps autoTestTarget pdf
     // 模拟器 picker(UIExtension) 关闭后窗口失焦，UI 驱动不可靠，用它直连转换链取堆栈
     const atFile = AppStorage.get<string>('autoTestFile') ?? '';
@@ -102,31 +239,71 @@ export struct ConvertHome {
     const kind = await svc.sniffKind(src, name);
     const r = await svc.convert(src, name, target);
     this.message = `[autotest:${kind}] ${r.message}`;
-  }
-
-  private refreshInstalled(): void {
-    const list = this.packManager?.listInstalled() ?? [];
-    this.installedCount = list.length;
-    this.installedLines = list.map((p) => `${p.enabled ? '✅' : '⏸'} ${p.name} ${p.version}`);
-  }
-
-  private converterId(target: string): string {
-    if (target === 'pdf') {
-      return 'docx-to-pdf';
+    if (r.ok) {
+      // 与 UI 路径共用完成流程（小窗 + 通知），联调即真实验证
+      await this.completeConvert(r);
     }
-    return `pdf-to-${target}`;
+  }
+
+  /** 转换成功公共出口：结果小窗 + 系统通知（宪法第九条：结果确认） */
+  private async completeConvert(result: ConvertResult): Promise<void> {
+    this.pendingResult = result;
+    const kb = result.outputBytes !== undefined ? (result.outputBytes.length / 1024).toFixed(1) : '?';
+    this.doneOk = true;
+    this.doneTitle = '转换完成';
+    this.doneDetail = `${result.suggestedName ?? '输出文件'} · ${kb} KB，可保存或继续转换`;
+    await this.notifyDone(result.suggestedName ?? '', this.doneDetail);
+    this.doneSheet.open();
+  }
+
+  /** 主题依赖锚点：build 中读取 themeId，保证换肤时整页重渲染 */
+  private themeBG(): string {
+    return this.themeId >= 0 ? DT.BG : DT.BG;
+  }
+
+  /** 应用主题：AppStorage 全 app 重渲染 + preferences 持久化 + 状态栏随明暗 */
+  private async applyTheme(id: number): Promise<void> {
+    AppStorage.setOrCreate(DT.THEME_KEY, id);
+    try {
+      const ctx = getContext(this) as common.Context;
+      const prefs = await preferences.getPreferences(ctx, DT.THEME_PREF_FILE);
+      await prefs.put(DT.THEME_KEY, id);
+      await prefs.flush();
+    } catch (_) {
+      // 持久化失败不阻塞换肤
+    }
+    try {
+      const win = await window.getLastWindow(getContext(this));
+      const dark = DT.themeDark(id);
+      await win.setWindowSystemBarProperties({
+        statusBarContentColor: dark ? '#F2F2F7' : '#1A1A20',
+        isStatusBarLightIcon: dark
+      });
+    } catch (_) {
+      // 状态栏配色失败不阻塞换肤
+    }
+  }
+
+  /** 转换完成系统通知（用户未授权则静默跳过） */
+  private async notifyDone(name: string, detail: string): Promise<void> {
+    try {
+      await notificationManager.requestEnableNotification();
+      await notificationManager.publish({
+        id: CVT_DOMAIN,
+        content: {
+          contentType: notification.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+          normal: { title: '转换完成', text: `${detail}` }
+        }
+      });
+      hilog.info(CVT_DOMAIN, CVT_TAG, 'notification published for %{public}s', name);
+    } catch (e) {
+      hilog.warn(CVT_DOMAIN, CVT_TAG, 'notification skipped: %{public}s', (e as Error).message);
+    }
   }
 
   /** 当前源类型可用的目标格式 */
   private targets(): TargetOption[] {
     return TARGET_MATRIX[this.sourceKind] ?? [];
-  }
-
-  private converterLabel(target: string): string {
-    if (target === 'pdf') {
-      return 'DOCX → PDF';
-    }
-    return `PDF → ${target.toUpperCase()}`;
   }
 
   private pickSource(): void {
@@ -163,11 +340,13 @@ export struct ConvertHome {
     this.message = '转换中…';
     this.convertService.convert(this.selectedUri, this.selectedName, target)
       .then(async (result: ConvertResult) => {
-        this.message = result.message;
-        if (result.ok) {
-          this.message = await this.convertService!.saveResult(result);
-        }
         this.busy = false;
+        if (result.ok) {
+          this.message = result.message;
+          await this.completeConvert(result);
+        } else {
+          this.message = result.message;
+        }
       })
       .catch((e: Error) => {
         this.message = `转换失败：${e?.message ?? '未知错误'}`;
@@ -175,48 +354,38 @@ export struct ConvertHome {
       });
   }
 
-  private refreshMarket(): void {
-    if (!this.packManager) {
+  /** 完成小窗「保存到…」：系统保存面板写出 */
+  private doSave(): void {
+    const result = this.pendingResult;
+    if (!result || !this.convertService) {
       return;
     }
-    this.installStatus = '正在拉取注册表…';
-    this.packManager.fetchRegistry(this.registryUrl)
-      .then((pkgs: RegistryPackage[]) => {
-        this.market = pkgs;
-        this.installStatus = `市场共 ${pkgs.length} 个包（视觉预设等扩展资源）。安装即下载并校验（SHA-256）。`;
-      })
-      .catch((e: Error) => {
-        this.market = [];
-        this.installStatus = `拉取失败：${e.message}。请检查手机与服务的连通（联调需 fport 转发或局域网地址），可编辑上方地址后重试。`;
-      });
-  }
-
-  private saveUrl(): void {
-    if (this.prefs) {
-      this.prefs.put(KEY_REGISTRY, this.registryUrl);
-      this.prefs.flush();
-    }
-    this.urlEditing = false;
-  }
-
-  private installPack(pkg: RegistryPackage): void {
-    if (!this.packManager) {
-      return;
-    }
-    this.packManager.install(pkg, (phase: InstallPhase, msg: string) => {
-      this.installStatus = msg;
-    }).then((r) => {
-      this.installStatus = r.message;
-      this.refreshInstalled();
+    this.convertService.saveResult(result).then((msg: string) => {
+      this.message = msg;
+    }).catch((e: Error) => {
+      this.message = `保存失败：${e?.message ?? '未知错误'}`;
     });
   }
 
   build() {
     Column() {
       // 顶栏（让位状态栏）
-      Row({ space: 12 }) {
+      Row({ space: 10 }) {
         Text('转换').fontSize(DT.F_TITLE).fontWeight(FontWeight.Bold).fontColor(DT.TEXT)
         Blank()
+        // 主题皮肤入口
+        Button() {
+          SymbolGlyph($r('sys.symbol.paintpalette'))
+            .fontSize(20)
+            .fontColor([DT.ACCENT])
+        }
+        .type(ButtonType.Circle)
+        .width(DT.TAP_MIN - 6)
+        .height(DT.TAP_MIN - 6)
+        .backgroundColor(DT.CARD_2)
+        .onClick(() => {
+          this.themeSheet.open();
+        })
         Button('选择文件')
           .fontSize(DT.F_SUB)
           .height(DT.TAP_MIN - 8)
@@ -250,8 +419,8 @@ export struct ConvertHome {
           // 目标格式矩阵（单一渐变主按钮规则 → 首个目标为主按钮，其余胶囊随行）
           if (this.selectedName !== '' && this.targets().length > 0) {
             Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-              ForEach(this.targets(), (opt: TargetOption, idx: number) => {
-                Button(`导出 ${opt.label}`)
+              ForEach(this.targets(), (o: TargetOption, idx: number) => {
+                Button(`导出 ${o.label}`)
                   .fontSize(DT.F_SUB)
                   .height(DT.TAP_MIN)
                   .padding({ left: 22, right: 22 })
@@ -262,8 +431,8 @@ export struct ConvertHome {
                     ? { angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] }
                     : { angle: 135, colors: [['#3A3A46', 0], ['#32323E', 1]] })
                   .enabled(!this.busy)
-                  .onClick(() => this.runConvert(opt.target))
-              }, (opt: TargetOption) => opt.target)
+                  .onClick(() => this.runConvert(o.target))
+              }, (o: TargetOption) => o.target)
             }
             .width('100%')
           }
@@ -274,119 +443,8 @@ export struct ConvertHome {
             .width('100%')
             .maxLines(3)
             .textAlign(TextAlign.LEFT)
-
-          // ── 扩展包市场卡片 ──
-          Column({ space: 12 }) {
-            Row({ space: 10 }) {
-              Text('扩展包市场').fontSize(DT.F_SECTION).fontWeight(FontWeight.Medium).fontColor(DT.TEXT)
-              Blank()
-              if (this.urlEditing) {
-                Button('保存')
-                  .fontSize(DT.F_CAPTION)
-                  .height(DT.TAP_MIN - 16)
-                  .padding({ left: 14, right: 14 })
-                  .fontColor('#FFFFFF')
-                  .backgroundColor(DT.ACCENT)
-                  .borderRadius(DT.R_CHIP)
-                  .onClick(() => this.saveUrl())
-              } else {
-                Button('刷新')
-                  .fontSize(DT.F_CAPTION)
-                  .height(DT.TAP_MIN - 16)
-                  .padding({ left: 14, right: 14 })
-                  .fontColor(DT.ACCENT)
-                  .backgroundColor(DT.CARD_2)
-                  .borderRadius(DT.R_CHIP)
-                  .onClick(() => this.refreshMarket())
-              }
-            }
-            .width('100%')
-
-            // 注册表地址（可编辑持久化，宪法第六条错误出口的前提）
-            if (this.urlEditing) {
-              TextInput({ text: this.registryUrl, placeholder: 'http://192.168.x.x:8765/registry.json' })
-                .fontSize(DT.F_SUB)
-                .height(DT.TAP_MIN - 4)
-                .backgroundColor(DT.BG)
-                .borderRadius(DT.R_CHIP)
-                .onChange((v: string) => {
-                  this.registryUrl = v;
-                })
-            } else {
-              Text(this.registryUrl)
-                .fontSize(DT.F_CAPTION)
-                .fontColor(DT.TEXT_3)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-                .onClick(() => {
-                  this.urlEditing = true;
-                })
-            }
-
-            if (this.installStatus !== '') {
-              Text(this.installStatus)
-                .fontSize(DT.F_CAPTION)
-                .fontColor(DT.TEXT_2)
-                .width('100%')
-                .maxLines(4)
-            }
-
-            if (this.market.length === 0 && this.installStatus === '') {
-              Text('尚未拉取。点击「刷新」获取可用功能包。')
-                .fontSize(DT.F_CAPTION)
-                .fontColor(DT.TEXT_3)
-            }
-
-            ForEach(this.market, (pkg: RegistryPackage) => {
-              Row({ space: 12 }) {
-                Column({ space: 4 }) {
-                  Text(pkg.name).fontSize(DT.F_BODY).fontColor(DT.TEXT).fontWeight(FontWeight.Medium)
-                  Text(`${pkg.summary} · ${(pkg.size / 1024).toFixed(0)}KB · v${pkg.version}`)
-                    .fontSize(DT.F_CAPTION)
-                    .fontColor(DT.TEXT_3)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-
-                Button('安装')
-                  .fontSize(DT.F_SUB)
-                  .height(DT.TAP_MIN - 12)
-                  .padding({ left: 18, right: 18 })
-                  .fontColor('#FFFFFF')
-                  .backgroundColor(DT.ACCENT)
-                  .borderRadius(DT.R_CHIP)
-                  .onClick(() => this.installPack(pkg))
-              }
-              .width('100%')
-              .padding({ top: 10, bottom: 10 })
-              .borderRadius(DT.R_CHIP)
-              .backgroundColor(DT.CARD_2)
-            }, (pkg: RegistryPackage) => `${pkg.id}@${pkg.version}`)
-
-            if (this.installedCount > 0) {
-              Divider().color(DT.DIVIDER)
-              Text(`已安装 ${this.installedCount} 个`)
-                .fontSize(DT.F_CAPTION)
-                .fontColor(DT.TEXT_2)
-                .width('100%')
-              ForEach(this.installedLines, (line: string) => {
-                Text(line)
-                  .fontSize(DT.F_CAPTION)
-                  .fontColor(DT.TEXT_2)
-                  .width('100%')
-              }, (line: string) => line)
-            }
-          }
-          .width('100%')
-          .padding(DT.PAD)
-          .backgroundColor(DT.CARD)
-          .borderRadius(DT.R_CARD)
-          .shadow({ radius: 16, color: DT.SHADOW_CARD, offsetY: 4 })
         }
-        .padding({ left: DT.PAD, right: DT.PAD, bottom: this.navBarHeight + DT.PAD })
+        .padding({ left: DT.PAD, right: DT.PAD, bottom: this.navBarHeight + DT.ISLAND_CLEAR })
         .alignItems(HorizontalAlign.Center)
       }
       .layoutWeight(1)
@@ -395,6 +453,6 @@ export struct ConvertHome {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(DT.BG)
+    .backgroundColor(this.themeBG())
   }
 }
