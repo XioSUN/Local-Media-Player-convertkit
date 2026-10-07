@@ -25,10 +25,13 @@ export class ThemePalette {
   readonly maskScrim: string;  // 浮层遮罩
   readonly matColor: string;   // 沉浸材质底色（悬浮卡/悬浮岛玻璃 tint）
   readonly matBrightness: number; // 材质亮度（深色主题压暗、浅色主题提亮）
+  readonly matBorder: string;  // 材质描边（岛/浮层卡与同色系背景的边界，v1.5.1）
+  readonly matShadow: string;  // 材质投影（比 SHADOW_CARD 重，保证浅色主题可辨）
 
   constructor(name: string, dark: boolean, bg: string, card: string, card2: string,
     divider: string, text: string, text2: string, text3: string,
-    shadowCard: string, maskScrim: string, matColor: string, matBrightness: number) {
+    shadowCard: string, maskScrim: string, matColor: string, matBrightness: number,
+    matBorder: string, matShadow: string) {
     this.name = name;
     this.dark = dark;
     this.bg = bg;
@@ -42,18 +45,20 @@ export class ThemePalette {
     this.maskScrim = maskScrim;
     this.matColor = matColor;
     this.matBrightness = matBrightness;
+    this.matBorder = matBorder;
+    this.matShadow = matShadow;
   }
 }
 
 const THEME_LIST: ThemePalette[] = [
   new ThemePalette('纯白', false, '#FFFFFF', '#F5F5F8', '#ECECF1', '#E2E2E8',
-    '#1A1A20', '#55555E', '#8E8E96', 'rgba(15,20,40,0.08)', 'rgba(20,20,25,0.35)', 'rgba(255,255,255,0.70)', 1.06),
+    '#1A1A20', '#55555E', '#8E8E96', 'rgba(15,20,40,0.08)', 'rgba(20,20,25,0.35)', 'rgba(255,255,255,0.82)', 1.06, 'rgba(15,20,40,0.10)', 'rgba(20,30,60,0.18)'),
   new ThemePalette('米白', false, '#FAF5EA', '#F3EDDF', '#EAE2CF', '#E0D7C2',
-    '#2B2317', '#6B5F49', '#9C9078', 'rgba(90,70,30,0.10)', 'rgba(43,35,23,0.35)', 'rgba(255,252,244,0.70)', 1.06),
+    '#2B2317', '#6B5F49', '#9C9078', 'rgba(90,70,30,0.10)', 'rgba(43,35,23,0.35)', 'rgba(255,252,244,0.82)', 1.06, 'rgba(90,70,30,0.14)', 'rgba(90,70,30,0.18)'),
   new ThemePalette('纯黑', true, '#000000', '#15151B', '#1F1F27', '#28282F',
-    '#F2F2F7', '#B8B8C4', '#7C7C8A', 'rgba(0,0,0,0.50)', 'rgba(8,8,12,0.60)', 'rgba(26,26,34,0.62)', 0.85),
+    '#F2F2F7', '#B8B8C4', '#7C7C8A', 'rgba(0,0,0,0.50)', 'rgba(8,8,12,0.60)', 'rgba(26,26,34,0.62)', 0.85, 'rgba(255,255,255,0.09)', 'rgba(0,0,0,0.55)'),
   new ThemePalette('护眼绿', false, '#CCE8CF', '#C2E0C6', '#B4D6B9', '#A5C9AB',
-    '#1E3322', '#46604B', '#6E8873', 'rgba(30,60,35,0.12)', 'rgba(30,51,34,0.35)', 'rgba(245,255,245,0.72)', 1.05)
+    '#1E3322', '#46604B', '#6E8873', 'rgba(30,60,35,0.12)', 'rgba(30,51,34,0.35)', 'rgba(245,255,245,0.85)', 1.05, 'rgba(30,60,35,0.16)', 'rgba(30,60,35,0.16)')
 ];
 
 export class DT {
@@ -94,6 +99,8 @@ export class DT {
   static get MASK_SCRIM(): string { return DT.palette().maskScrim; }
   static get MAT_COLOR(): string { return DT.palette().matColor; }
   static get MAT_BRIGHTNESS(): number { return DT.palette().matBrightness; }
+  static get MAT_BORDER(): string { return DT.palette().matBorder; }
+  static get MAT_SHADOW(): string { return DT.palette().matShadow; }
 
   // ── 色彩 · 品牌（跨主题恒定，琥珀暖橙呼应频谱视觉主题）──
   static readonly ACCENT: string = '#E8742C';

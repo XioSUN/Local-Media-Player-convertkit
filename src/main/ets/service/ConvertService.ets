@@ -11,24 +11,11 @@ import { detectDocKind, type DocKind } from './DocKind.ets';
 import { inflateZlib } from '../core/pdf/Inflate.ts';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import type { PdfInflate } from '../core/pdf/PdfTextExtractor.ts';
+import { routeConversion } from '../core/ConvertRoute.ts';
+import { errText } from '../core/ErrorText.ts';
 
 const CVT_DOMAIN = 0x0203;
 const CVT_TAG = 'LMP-Convert';
-
-/** 健壮错误文本（BusinessError/Error/字符串/null 全覆盖，杜绝 undefined） */
-function errText(e: Object | undefined | null): string {
-  if (e === undefined || e === null) {
-    return '未知错误';
-  }
-  const maybe = e as Record<string, string>;
-  if (typeof maybe.message === 'string' && maybe.message.length > 0) {
-    return maybe.message;
-  }
-  if (typeof maybe.code === 'string' || typeof maybe.code === 'number') {
-    return `错误码 ${String(maybe.code)}`;
-  }
-  return String(e);
-}
 
 /** 转换结果 */
 export interface ConvertResult {
@@ -158,24 +145,34 @@ export class ConvertService {
       let output: Uint8Array;
       const baseName = sourceName.replace(/\.[^.]+$/, '');
 
-      if (kind === 'docx' && target === 'pdf') {
-        output = docxToPdf(await this.openZip(sourceUri, 'docx'));
-      } else if (kind === 'docx' && target === 'txt') {
-        output = docxToTxt(await this.openZip(sourceUri, 'docx'));
-      } else if (kind === 'pdf' && target === 'docx') {
-        output = pdfToDocx(await this.readAll(sourceUri), this.inflateAdapter);
-      } else if (kind === 'pdf' && target === 'xlsx') {
-        output = pdfToXlsx(await this.readAll(sourceUri), this.inflateAdapter);
-      } else if (kind === 'pdf' && target === 'epub') {
-        output = pdfToEpub(await this.readAll(sourceUri), this.inflateAdapter);
-      } else if (kind === 'xlsx' && target === 'pdf') {
-        output = xlsxToPdf(await this.openZip(sourceUri, 'xlsx'));
-      } else if (kind === 'epub' && target === 'pdf') {
-        output = epubToPdf(await this.openZip(sourceUri, 'epub'));
-      } else if (kind === 'txt' && target === 'pdf') {
-        output = txtToPdf(await this.readAll(sourceUri));
-      } else {
-        return { ok: false, message: `不支持 ${this.kindLabel(kind)} → ${target.toUpperCase()}（docx→PDF/TXT、pdf→Word/Excel/EPUB、xlsx→PDF、epub→PDF、txt→PDF）` };
+      const route = routeConversion(kind, target);
+      switch (route) {
+        case 'docxToPdf':
+          output = docxToPdf(await this.openZip(sourceUri, 'docx'));
+          break;
+        case 'docxToTxt':
+          output = docxToTxt(await this.openZip(sourceUri, 'docx'));
+          break;
+        case 'pdfToDocx':
+          output = pdfToDocx(await this.readAll(sourceUri), this.inflateAdapter);
+          break;
+        case 'pdfToXlsx':
+          output = pdfToXlsx(await this.readAll(sourceUri), this.inflateAdapter);
+          break;
+        case 'pdfToEpub':
+          output = pdfToEpub(await this.readAll(sourceUri), this.inflateAdapter);
+          break;
+        case 'xlsxToPdf':
+          output = xlsxToPdf(await this.openZip(sourceUri, 'xlsx'));
+          break;
+        case 'epubToPdf':
+          output = epubToPdf(await this.openZip(sourceUri, 'epub'));
+          break;
+        case 'txtToPdf':
+          output = txtToPdf(await this.readAll(sourceUri));
+          break;
+        default:
+          return { ok: false, message: `不支持 ${this.kindLabel(kind)} → ${target.toUpperCase()}（docx→PDF/TXT、pdf→Word/Excel/EPUB、xlsx→PDF、epub→PDF、txt→PDF）` };
       }
 
       return {
