@@ -1,0 +1,34 @@
+src/main/ets/core/Converters.ts
+  h_d3159b77e5b8b8 12,16,19-20,167-308
+src/main/ets/core/epub/EpubParser.ts
+  h_d3159b77e5b8b8 1-116
+src/main/ets/core/epub/EpubWriter.ts
+  h_d3159b77e5b8b8 1-124
+src/main/ets/core/extpack/RegistryCore.ts
+  h_d3159b77e5b8b8 14,17-20
+src/main/ets/core/html/HtmlText.ts
+  h_d3159b77e5b8b8 1-96
+src/main/ets/core/ooxml/XlsxParser.ts
+  h_d3159b77e5b8b8 1-137
+src/main/ets/core/ooxml/XlsxWriter.ts
+  h_d3159b77e5b8b8 56-59,62,123
+src/main/ets/service/ConvertService.ets
+  h_d3159b77e5b8b8 6-9,41-43,96-97,99-100,103,107,149,152,154,162-164,166,168-176,178,195-204
+src/main/ets/service/DocKind.ets
+  h_d3159b77e5b8b8 3,6,39-41,52-57
+src/main/ets/view/ConvertHome.ets
+  h_d3159b77e5b8b8 4-5,14-51,60,62,90-97,99-104,120-124,136,142-151,157,164,250-268
+tests/converters-v2.test.ts
+  h_d3159b77e5b8b8 1-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "5.30.1",
+  "base_commit_sha": "012e87ce3fe06496dc724c4646db7482f5f06292",
+  "prompts": {},
+  "humans": {
+    "h_d3159b77e5b8b8": {
+      "author": "xiosun <xio.sunshaowei@huawei.com>"
+    }
+  }
+}
