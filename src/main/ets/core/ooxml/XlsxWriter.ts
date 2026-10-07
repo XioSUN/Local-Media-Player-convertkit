@@ -53,13 +53,13 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>`;
 
-function workbookXml(sheetCount: number): string {
-  const sheets = Array.from({ length: sheetCount }, (_, i) =>
-    `<sheet name="${esc(`Sheet${i + 1}`)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`
-  ).join('');
+function workbookXml(sheets: Worksheet[]): string {
+  const items = sheets
+    .map((s, i) => `<sheet name="${esc(s.name.length > 0 ? s.name : `Sheet${i + 1}`)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets>${sheets}</sheets>
+<sheets>${items}</sheets>
 </workbook>`;
 }
 
@@ -120,7 +120,7 @@ export class XlsxWriter {
     const n = this.wb.sheets.length;
     zip.addText('[Content_Types].xml', CONTENT_TYPES(n));
     zip.addText('_rels/.rels', ROOT_RELS);
-    zip.addText('xl/workbook.xml', workbookXml(n));
+    zip.addText('xl/workbook.xml', workbookXml(this.wb.sheets));
     zip.addText('xl/_rels/workbook.xml.rels', workbookRels(n));
     zip.addText('xl/styles.xml', STYLES_XML);
     this.wb.sheets.forEach((sheet, i) => {

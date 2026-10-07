@@ -9,11 +9,15 @@
  */
 
 import { type ZipSource } from './zip/ZipCodec.ts';
+import { utf8Decode, utf8Encode } from './zip/Utf8.ts';
 import { parseDocxXml, type DocParagraph, type ParagraphStyle } from './ooxml/DocxParser.ts';
 import { DocxWriter } from './ooxml/DocxWriter.ts';
 import { XlsxWriter, type CellValue } from './ooxml/XlsxWriter.ts';
+import { parseXlsx } from './ooxml/XlsxParser.ts';
 import { PdfWriter } from './pdf/PdfWriter.ts';
 import { extractPdfText, linesToRows, type PdfInflate } from './pdf/PdfTextExtractor.ts';
+import { parseEpub, type EpubChapter } from './epub/EpubParser.ts';
+import { writeEpub } from './epub/EpubWriter.ts';
 
 export const CONVERTER_DOCX2PDF = 'docx-to-pdf';
 export const CONVERTER_PDF2DOCX = 'pdf-to-docx';
@@ -159,4 +163,146 @@ export function pdfToXlsx(bytes: Uint8Array, inflate: PdfInflate): Uint8Array {
   }
 
   return new XlsxWriter({ sheets: [{ name: 'Sheet1', rows }] }).build();
+}
+
+// ─────────────────────────────────────────────────────
+// v2 扩展管线（参考 convertio / smallpdf 的文档转换面）
+// ─────────────────────────────────────────────────────
+
+export const CONVERTER_EPUB2PDF = 'epub-to-pdf';
+export const CONVERTER_TXT2PDF = 'txt-to-pdf';
+export const CONVERTER_PDF2EPUB = 'pdf-to-epub';
+export const CONVERTER_XLSX2PDF = 'xlsx-to-pdf';
+export const CONVERTER_DOCX2TXT = 'docx-to-txt';
+
+/** TXT → PDF（UTF-8 文本，空行分段） */
+export function txtToPdf(bytes: Uint8Array): Uint8Array {
+  const text = utf8Decode(bytes);
+  if (text.trim().length === 0) {
+    throw new Error('txtToPdf: 文本内容为空');
+  }
+  const pdf = new PdfWriter({ pageSize: 'A4' });
+  let pendingBlank = false;
+  let first = true;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/, '').trim();
+    if (line.length === 0) {
+      if (!first) {
+        pendingBlank = true;
+      }
+      continue;
+    }
+    if (pendingBlank) {
+      pdf.addParagraph('', 'normal'); // 段间空行
+      pendingBlank = false;
+    }
+    pdf.addParagraph(line, 'normal');
+    first = false;
+  }
+  return pdf.build();
+}
+
+/** EPUB → PDF（章节标题 h1 + 正文段落） */
+export function epubToPdf(source: ZipSource): Uint8Array {
+  const book = parseEpub(source);
+  const pdf = new PdfWriter({ pageSize: 'A4' });
+  for (let i = 0; i < book.chapters.length; i++) {
+    const ch = book.chapters[i];
+    if (ch.title.length > 0) {
+      pdf.addParagraph(ch.title, 'h1');
+    }
+    for (const line of ch.text.split('\n')) {
+      const t = line.trim();
+      if (t.length > 0) {
+        pdf.addParagraph(t, 'normal');
+      }
+    }
+  }
+  return pdf.build();
+}
+
+/** PDF → EPUB（复用 pdfToDocx 的字号推断与段落聚合，h1/h2 切章） */
+export function pdfToEpub(bytes: Uint8Array, inflate: PdfInflate): Uint8Array {
+  const text = extractPdfText(bytes, inflate);
+  const paragraphs: DocParagraph[] = [];
+  const body = inferStyles(text.pages.flatMap((p) => p.lines.map((l) => l.size))).body;
+  for (const page of text.pages) {
+    let buffer = '';
+    let lastY: number | null = null;
+    let lastSize = body;
+    const flushPara = () => {
+      const t = buffer.trim();
+      if (t.length > 0) {
+        paragraphs.push({ style: styleFor(lastSize, body), runs: [{ text: t }] });
+      }
+      buffer = '';
+    };
+    for (const line of page.lines) {
+      const yGap = lastY === null ? 0 : lastY - line.y;
+      if (lastY !== null && (yGap > line.size * 1.7 || Math.abs(line.size - lastSize) > 0.5)) {
+        flushPara();
+      }
+      buffer += (buffer.length > 0 ? ' ' : '') + line.text;
+      lastY = line.y;
+      lastSize = line.size;
+    }
+    flushPara();
+  }
+
+  // h1/h2 起章，其余聚合；无标题则约每 60 段一章
+  const chapters: EpubChapter[] = [];
+  let current: EpubChapter | null = null;
+  let count = 0;
+  for (const para of paragraphs) {
+    const heading = para.style === 'h1' || para.style === 'h2' ? para.runs.map((r) => r.text).join('').trim() : '';
+    if (current === null || (heading.length > 0 && heading.length <= 80) || count >= 60) {
+      current = { title: heading.length > 0 ? heading : `第 ${chapters.length + 1} 部分`, text: '' };
+      chapters.push(current);
+      count = 0;
+      if (heading.length > 0) {
+        continue;
+      }
+    }
+    const t = para.runs.map((r) => r.text).join('');
+    if (t.length > 0) {
+      current.text += (current.text.length > 0 ? '\n\n' : '') + t;
+    }
+    count += 1;
+  }
+  if (chapters.length === 0) {
+    throw new Error('pdfToEpub: PDF 无可提取文本（可能是扫描件）');
+  }
+  const title = `Converted ${new Date().toISOString().slice(0, 10)}`;
+  return writeEpub({ title, chapters });
+}
+
+/** XLSX → PDF（每表一节：表名 h2 + 行单元格「|」连接） */
+export function xlsxToPdf(source: ZipSource): Uint8Array {
+  const workbook = parseXlsx(source);
+  const pdf = new PdfWriter({ pageSize: 'A4' });
+  for (let i = 0; i < workbook.sheets.length; i++) {
+    const sheet = workbook.sheets[i];
+    pdf.addParagraph(sheet.name.length > 0 ? sheet.name : `Sheet${i + 1}`, 'h2');
+    for (const row of sheet.rows) {
+      const cells = row.map((c: CellValue): string => (c === null ? '' : String(c)));
+      if (cells.some((c: string) => c.length > 0)) {
+        pdf.addParagraph(cells.join(' | '), 'normal');
+      }
+    }
+  }
+  return pdf.build();
+}
+
+/** DOCX → TXT（段落文本，空行分隔） */
+export function docxToTxt(source: ZipSource): Uint8Array {
+  const xml = source.readText('word/document.xml');
+  if (xml === null) {
+    throw new Error('docxToTxt: 缺少 word/document.xml（不是有效的 DOCX）');
+  }
+  const doc = parseDocxXml(xml);
+  const parts: string[] = [];
+  for (const para of doc.paragraphs) {
+    parts.push(para.runs.map((r) => r.text).join(''));
+  }
+  return utf8Encode(parts.join('\n'));
 }

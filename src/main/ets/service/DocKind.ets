@@ -1,9 +1,9 @@
 /**
  * DocKind — 转换模块的最小类型探测（魔数级）。
- * 只需区分 pdf / docx / xlsx（转换路由用）；完整文档类型识别见 doc-viewer 仓。
+ * v2 扩展：epub（zip + mimetype 条目）/ txt（扩展名兜底）。
  */
 
-export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'unsupported';
+export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'epub' | 'txt' | 'unsupported';
 
 function hasSub(bytes: Uint8Array, text: string): boolean {
   const limit = Math.min(bytes.length - text.length, 4096);
@@ -36,6 +36,9 @@ export function detectDocKind(bytes: Uint8Array, fileName: string): DocKind {
     if (hasSub(bytes, 'xl/')) {
       return 'xlsx';
     }
+    if (hasSub(bytes, 'epub+zip')) {
+      return 'epub';
+    }
   }
   if (lower.endsWith('.pdf')) {
     return 'pdf';
@@ -45,6 +48,12 @@ export function detectDocKind(bytes: Uint8Array, fileName: string): DocKind {
   }
   if (lower.endsWith('.xlsx')) {
     return 'xlsx';
+  }
+  if (lower.endsWith('.epub')) {
+    return 'epub';
+  }
+  if (lower.endsWith('.txt') || lower.endsWith('.md')) {
+    return 'txt';
   }
   return 'unsupported';
 }

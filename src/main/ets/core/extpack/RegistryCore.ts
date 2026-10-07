@@ -11,9 +11,13 @@ import { compareVersions, isCompatible, type PackKind } from './ExtensionManifes
 
 /**
  * 内置转换器（v1.1 起随应用分发，无需安装任何扩展包即解锁）。
+ * v2：电子书/文本方向扩展（epub→pdf、txt→pdf、pdf→epub、xlsx→pdf、docx→txt）。
  * converter-profile 类型扩展包保留用于未来分发新增转换能力。
  */
-export const BUILTIN_CONVERTERS: string[] = ['docx-to-pdf', 'pdf-to-docx', 'pdf-to-xlsx'];
+export const BUILTIN_CONVERTERS: string[] = [
+  'docx-to-pdf', 'pdf-to-docx', 'pdf-to-xlsx',
+  'epub-to-pdf', 'txt-to-pdf', 'pdf-to-epub', 'xlsx-to-pdf', 'docx-to-txt'
+];
 
 export function isBuiltInConverter(converterId: string): boolean {
   return BUILTIN_CONVERTERS.includes(converterId);

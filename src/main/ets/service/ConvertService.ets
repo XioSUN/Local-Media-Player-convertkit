@@ -3,7 +3,10 @@ import fs from '@ohos.file.fs';
 import { zlib } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { MappedZipSource, type ZipSource, type ZipEntry } from '../core/zip/ZipCodec.ts';
-import { docxToPdf, pdfToDocx, pdfToXlsx } from '../core/Converters.ts';
+import {
+  docxToPdf, pdfToDocx, pdfToXlsx,
+  epubToPdf, txtToPdf, pdfToEpub, xlsxToPdf, docxToTxt
+} from '../core/Converters.ts';
 import { detectDocKind, type DocKind } from './DocKind.ets';
 import { inflateZlib } from '../core/pdf/Inflate.ts';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -34,6 +37,9 @@ export interface ConvertResult {
   outputBytes?: Uint8Array;
   suggestedName?: string;
 }
+
+/** 目标格式（v2 扩展：+epub/txt） */
+export type ConvertTarget = 'pdf' | 'docx' | 'xlsx' | 'epub' | 'txt';
 
 /**
  * ConvertService — 设备侧转换服务。
@@ -87,18 +93,18 @@ export class ConvertService {
     }
   }
 
-  /** DOCX → MappedZipSource（解包临时目录） */
-  private async openDocx(uri: string): Promise<ZipSource> {
+  /** ZIP 容器文档（docx/xlsx/epub）→ MappedZipSource（解包临时目录） */
+  private async openZip(uri: string, label: string): Promise<ZipSource> {
     const stamp = Date.now();
-    const srcLocal = `${this.tmpDir}/src_${stamp}.docx`;
-    const dest = `${this.tmpDir}/docx_${stamp}`;
+    const srcLocal = `${this.tmpDir}/src_${stamp}`;
+    const dest = `${this.tmpDir}/${label}_${stamp}`;
     await fs.mkdir(dest, true).catch(() => undefined);
     await this.stageToLocal(uri, srcLocal);
-    hilog.info(CVT_DOMAIN, CVT_TAG, 'unzip docx -> %{public}s', dest);
+    hilog.info(CVT_DOMAIN, CVT_TAG, 'unzip %{public}s -> %{public}s', label, dest);
     try {
       await zlib.unzipFile(srcLocal, dest, {});
     } catch (e) {
-      throw new Error(`解压 DOCX 失败（${errText(e as Object)}），文件可能损坏或非标准 docx`);
+      throw new Error(`解压 ${label.toUpperCase()} 失败（${errText(e as Object)}），文件可能损坏或格式不受支持`);
     }
     const entries: ZipEntry[] = [];
     await this.collectDir(dest, '', entries);
@@ -140,11 +146,12 @@ export class ConvertService {
 
   /**
    * 执行转换（根据源类型自动路由）。
+   * v2 格式矩阵：docx→{pdf,txt} / pdf→{docx,xlsx,epub} / xlsx→{pdf} / epub→{pdf} / txt→{pdf}
    * @param sourceUri 源文件 URI
    * @param sourceName 源文件名
-   * @param target 目标格式 'pdf' | 'docx' | 'xlsx'
+   * @param target 目标格式 'pdf' | 'docx' | 'xlsx' | 'epub' | 'txt'
    */
-  async convert(sourceUri: string, sourceName: string, target: 'pdf' | 'docx' | 'xlsx'): Promise<ConvertResult> {
+  async convert(sourceUri: string, sourceName: string, target: ConvertTarget): Promise<ConvertResult> {
     try {
       const head = await this.readHead(sourceUri);
       const kind = detectDocKind(head, sourceName);
@@ -152,16 +159,23 @@ export class ConvertService {
       const baseName = sourceName.replace(/\.[^.]+$/, '');
 
       if (kind === 'docx' && target === 'pdf') {
-        const source = await this.openDocx(sourceUri);
-        output = docxToPdf(source);
+        output = docxToPdf(await this.openZip(sourceUri, 'docx'));
+      } else if (kind === 'docx' && target === 'txt') {
+        output = docxToTxt(await this.openZip(sourceUri, 'docx'));
       } else if (kind === 'pdf' && target === 'docx') {
-        const bytes = await this.readAll(sourceUri);
-        output = pdfToDocx(bytes, this.inflateAdapter);
+        output = pdfToDocx(await this.readAll(sourceUri), this.inflateAdapter);
       } else if (kind === 'pdf' && target === 'xlsx') {
-        const bytes = await this.readAll(sourceUri);
-        output = pdfToXlsx(bytes, this.inflateAdapter);
+        output = pdfToXlsx(await this.readAll(sourceUri), this.inflateAdapter);
+      } else if (kind === 'pdf' && target === 'epub') {
+        output = pdfToEpub(await this.readAll(sourceUri), this.inflateAdapter);
+      } else if (kind === 'xlsx' && target === 'pdf') {
+        output = xlsxToPdf(await this.openZip(sourceUri, 'xlsx'));
+      } else if (kind === 'epub' && target === 'pdf') {
+        output = epubToPdf(await this.openZip(sourceUri, 'epub'));
+      } else if (kind === 'txt' && target === 'pdf') {
+        output = txtToPdf(await this.readAll(sourceUri));
       } else {
-        return { ok: false, message: `不支持 ${this.kindLabel(kind)} → ${target.toUpperCase()}（可用：docx→pdf / pdf→docx / pdf→xlsx）` };
+        return { ok: false, message: `不支持 ${this.kindLabel(kind)} → ${target.toUpperCase()}（docx→PDF/TXT、pdf→Word/Excel/EPUB、xlsx→PDF、epub→PDF、txt→PDF）` };
       }
 
       return {
@@ -175,6 +189,16 @@ export class ConvertService {
       const stack = (e as Record<string, string>)['stack'] ?? '';
       hilog.error(CVT_DOMAIN, CVT_TAG, 'convert failed: %{public}s | %{public}s', msg, stack);
       return { ok: false, message: `转换失败：${msg}` };
+    }
+  }
+
+  /** 供 UI 选档后嗅探源类型（决定目标格式矩阵） */
+  async sniffKind(sourceUri: string, sourceName: string): Promise<DocKind> {
+    try {
+      const head = await this.readHead(sourceUri);
+      return detectDocKind(head, sourceName);
+    } catch (_) {
+      return 'unsupported';
     }
   }
 

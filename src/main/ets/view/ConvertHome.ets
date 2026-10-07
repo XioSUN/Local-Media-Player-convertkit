@@ -1,7 +1,8 @@
 import { picker } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
-import { ConvertService, type ConvertResult } from '../service/ConvertService';
+import { ConvertService, type ConvertResult, type ConvertTarget } from '../service/ConvertService';
+import { type DocKind } from '../service/DocKind.ets';
 import { ExtensionPackageManager, type InstallPhase } from '../service/ExtensionPackageManager';
 import { type RegistryPackage } from '../core/extpack/RegistryCore.ts';
 import { DT } from './DesignTokens';
@@ -9,6 +10,44 @@ import { DT } from './DesignTokens';
 const PREF_FILE = 'convert_settings';
 const KEY_REGISTRY = 'registryUrl';
 const DEFAULT_REGISTRY_URL = 'http://127.0.0.1:8765/registry.json';
+
+/** 目标格式矩阵（v2：按源类型展示可用目标，convertio 式交互） */
+interface TargetOption {
+  target: ConvertTarget;
+  label: string;
+}
+
+function opt(target: ConvertTarget, label: string): TargetOption {
+  const o: TargetOption = { target: target, label: label };
+  return o;
+}
+
+function buildMatrix(): Record<string, TargetOption[]> {
+  const r: Record<string, TargetOption[]> = {};
+  r['docx'] = [opt('pdf', 'PDF'), opt('txt', 'TXT')];
+  r['pdf'] = [opt('docx', 'Word'), opt('xlsx', 'Excel'), opt('epub', 'EPUB')];
+  r['xlsx'] = [opt('pdf', 'PDF')];
+  r['epub'] = [opt('pdf', 'PDF')];
+  r['txt'] = [opt('pdf', 'PDF')];
+  r['unsupported'] = [];
+  return r;
+}
+
+const TARGET_MATRIX: Record<string, TargetOption[]> = buildMatrix();
+
+function buildKindLabel(): Record<string, string> {
+  const r: Record<string, string> = {};
+  r['docx'] = 'Word 文档';
+  r['pdf'] = 'PDF 文档';
+  r['xlsx'] = 'Excel 表格';
+  r['epub'] = 'EPUB 电子书';
+  r['txt'] = '文本文件';
+  return r;
+}
+
+const KIND_LABEL: Record<string, string> = buildKindLabel();
+
+/** 导出按钮组内边距常量（DesignTokens 未含此粒度，就近集中定义） */
 
 /**
  * 文档转换 + 扩展包市场（浅色功能页）。
@@ -18,8 +57,9 @@ const DEFAULT_REGISTRY_URL = 'http://127.0.0.1:8765/registry.json';
 export struct ConvertHome {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
-  @State message: string = '转换能力已内置，选择文件即可导出 PDF / Word / Excel';
+  @State message: string = '转换能力已内置，选择文件即可导出 PDF / Word / Excel / EPUB / TXT';
   @State selectedName: string = '';
+  @State sourceKind: string = 'none';
   @State busy: boolean = false;
   @State installedCount: number = 0;
   @State installedLines: string[] = [];
@@ -47,14 +87,21 @@ export struct ConvertHome {
     const atFile = AppStorage.get<string>('autoTestFile') ?? '';
     if (atFile !== '' && this.convertService) {
       AppStorage.setOrCreate('autoTestFile', '');
-      const atTarget = (AppStorage.get<string>('autoTestTarget') ?? 'pdf') as 'pdf' | 'docx' | 'xlsx';
-      const svc = this.convertService;
-      const src = atFile.startsWith('/') || atFile.startsWith('file://') ? atFile : `${ctx.filesDir}/${atFile}`;
-      const name = atFile.substring(atFile.lastIndexOf('/') + 1);
-      svc.convert(src, name, atTarget).then((r: ConvertResult) => {
-        this.message = `[autotest] ${r.message}`;
-      });
+      this.runAutoTest(ctx, atFile, AppStorage.get<string>('autoTestTarget') ?? 'pdf');
     }
+  }
+
+  private async runAutoTest(ctx: common.Context, atFile: string, atTarget: string): Promise<void> {
+    const svc = this.convertService;
+    if (svc === undefined) {
+      return;
+    }
+    const target = atTarget as ConvertTarget;
+    const src = atFile.startsWith('/') || atFile.startsWith('file://') ? atFile : `${ctx.filesDir}/${atFile}`;
+    const name = atFile.substring(atFile.lastIndexOf('/') + 1);
+    const kind = await svc.sniffKind(src, name);
+    const r = await svc.convert(src, name, target);
+    this.message = `[autotest:${kind}] ${r.message}`;
   }
 
   private refreshInstalled(): void {
@@ -70,6 +117,11 @@ export struct ConvertHome {
     return `pdf-to-${target}`;
   }
 
+  /** 当前源类型可用的目标格式 */
+  private targets(): TargetOption[] {
+    return TARGET_MATRIX[this.sourceKind] ?? [];
+  }
+
   private converterLabel(target: string): string {
     if (target === 'pdf') {
       return 'DOCX → PDF';
@@ -81,26 +133,35 @@ export struct ConvertHome {
     const docPicker = new picker.DocumentViewPicker();
     const opts = new picker.DocumentSelectOptions();
     opts.maxSelectNumber = 1;
-    docPicker.select(opts).then((uris: string[]) => {
+    docPicker.select(opts).then(async (uris: string[]) => {
       if (!uris || uris.length === 0) {
         return;
       }
       this.selectedUri = uris[0];
       this.selectedName = decodeURIComponent(this.selectedUri.substring(this.selectedUri.lastIndexOf('/') + 1));
-      this.message = `已选择：${this.selectedName}`;
+      // 嗅探源类型 → 目标格式矩阵（convertio 式：选完即知能转什么）
+      const kind: DocKind = this.convertService !== undefined
+        ? await this.convertService.sniffKind(this.selectedUri, this.selectedName)
+        : 'unsupported';
+      this.sourceKind = kind;
+      if (kind === 'unsupported') {
+        this.message = `已选择：${this.selectedName}（该格式暂不支持，可试 docx/pdf/xlsx/epub/txt）`;
+      } else {
+        this.message = `已选择${KIND_LABEL[kind] ?? ''}：${this.selectedName}`;
+      }
     }).catch((e: Error) => {
       this.message = `选择文件失败：${e.message}`;
     });
   }
 
-  private runConvert(target: string): void {
+  private runConvert(target: ConvertTarget): void {
     if (!this.selectedUri || !this.convertService) {
       this.message = '请先选择源文件（上方「选择文件」）。';
       return;
     }
     this.busy = true;
     this.message = '转换中…';
-    this.convertService.convert(this.selectedUri, this.selectedName, target as 'pdf' | 'docx' | 'xlsx')
+    this.convertService.convert(this.selectedUri, this.selectedName, target)
       .then(async (result: ConvertResult) => {
         this.message = result.message;
         if (result.ok) {
@@ -186,37 +247,26 @@ export struct ConvertHome {
           .borderRadius(DT.R_CARD)
           .shadow({ radius: 16, color: DT.SHADOW_CARD, offsetY: 4 })
 
-          // 三个转换入口（单一渐变主按钮规则 → 横排等权胶囊）
-          Row({ space: 10 }) {
-            Button('导出 PDF')
-              .fontSize(DT.F_SUB)
-              .height(DT.TAP_MIN)
-              .layoutWeight(1)
-              .fontColor('#FFFFFF')
-              .borderRadius(DT.R_CHIP)
-              .linearGradient({ angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] })
-              .enabled(!this.busy)
-              .onClick(() => this.runConvert('pdf'))
-            Button('导出 Word')
-              .fontSize(DT.F_SUB)
-              .height(DT.TAP_MIN)
-              .layoutWeight(1)
-              .fontColor('#FFFFFF')
-              .borderRadius(DT.R_CHIP)
-              .linearGradient({ angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] })
-              .enabled(!this.busy)
-              .onClick(() => this.runConvert('docx'))
-            Button('导出 Excel')
-              .fontSize(DT.F_SUB)
-              .height(DT.TAP_MIN)
-              .layoutWeight(1)
-              .fontColor('#FFFFFF')
-              .borderRadius(DT.R_CHIP)
-              .linearGradient({ angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] })
-              .enabled(!this.busy)
-              .onClick(() => this.runConvert('xlsx'))
+          // 目标格式矩阵（单一渐变主按钮规则 → 首个目标为主按钮，其余胶囊随行）
+          if (this.selectedName !== '' && this.targets().length > 0) {
+            Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+              ForEach(this.targets(), (opt: TargetOption, idx: number) => {
+                Button(`导出 ${opt.label}`)
+                  .fontSize(DT.F_SUB)
+                  .height(DT.TAP_MIN)
+                  .padding({ left: 22, right: 22 })
+                  .margin({ right: 10, bottom: 10 })
+                  .fontColor('#FFFFFF')
+                  .borderRadius(DT.R_CHIP)
+                  .linearGradient(idx === 0
+                    ? { angle: 135, colors: [[DT.GRAD_FROM, 0], [DT.GRAD_TO, 1]] }
+                    : { angle: 135, colors: [['#3A3A46', 0], ['#32323E', 1]] })
+                  .enabled(!this.busy)
+                  .onClick(() => this.runConvert(opt.target))
+              }, (opt: TargetOption) => opt.target)
+            }
+            .width('100%')
           }
-          .width('100%')
 
           Text(this.message)
             .fontSize(DT.F_SUB)
